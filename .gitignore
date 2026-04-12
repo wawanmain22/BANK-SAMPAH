@@ -1,0 +1,53 @@
+# Dependencies
+/node_modules
+/vendor
+
+# Build artifacts
+/public/build
+/public/hot
+/public/storage
+
+# Storage & caches
+/storage/*.key
+/storage/pail
+/.phpunit.cache
+/.phpunit.result.cache
+
+# Environment & secrets
+.env
+.env.backup
+.env.production
+/auth.json
+
+# Logs
+npm-debug.log
+yarn-error.log
+
+# Editor / IDE
+/.fleet
+/.idea
+/.junie
+/.nova
+/.phpactor.json
+/.vscode
+/.zed
+
+# Homestead
+Homestead.json
+Homestead.yaml
+
+# AI / agent tooling
+/.agents
+/.claude
+/.mcp.json
+AGENTS.md
+CLAUDE.md
+boost.json
+opencode.json
+
+# Project-internal design docs (not for public repo)
+bank-sampah-vibe-code-laravel13-postgresql.md
+
+# OS
+.DS_Store
+Thumbs.db
