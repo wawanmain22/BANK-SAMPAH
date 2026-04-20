@@ -185,7 +185,7 @@ new #[Title('Master Poin')] class extends Component {
                 icon="{{ $row->is_active ? 'o-pause-circle' : 'o-play-circle' }}"
                 wire:click="toggleActive({{ $row->id }})"
                 class="btn-ghost btn-sm"
-                tooltip="{{ $row->is_active ? __('Non-aktifkan') : __('Aktifkan') }}"
+                tooltip-left="{{ $row->is_active ? __('Non-aktifkan') : __('Aktifkan') }}"
                 data-test="point-rule-toggle-{{ $row->id }}"
             />
         @endscope

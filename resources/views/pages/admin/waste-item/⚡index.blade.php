@@ -1,6 +1,7 @@
 <?php
 
 use App\Concerns\WasteItemValidationRules;
+use App\Concerns\WastePriceValidationRules;
 use App\Models\WasteCategory;
 use App\Models\WasteItem;
 use App\Models\WastePrice;
@@ -14,7 +15,7 @@ use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
 new #[Title('Barang Sampah')] class extends Component {
-    use Toast, WasteItemValidationRules, WithPagination;
+    use Toast, WasteItemValidationRules, WastePriceValidationRules, WithPagination;
 
     public string $search = '';
 
@@ -46,6 +47,21 @@ new #[Title('Barang Sampah')] class extends Component {
 
     public bool $historyModal = false;
 
+    public ?int $priceItemId = null;
+
+    public string $price_new = '';
+
+    public string $price_effective_from = '';
+
+    public string $price_notes = '';
+
+    public bool $priceModal = false;
+
+    public function mount(): void
+    {
+        $this->price_effective_from = now()->toDateString();
+    }
+
     public function updatingSearch(): void
     {
         $this->resetPage();
@@ -64,7 +80,7 @@ new #[Title('Barang Sampah')] class extends Component {
             ['key' => 'name', 'label' => __('Nama')],
             ['key' => 'category_label', 'label' => __('Kategori'), 'class' => 'hidden md:table-cell'],
             ['key' => 'unit', 'label' => __('Satuan'), 'class' => 'hidden md:table-cell'],
-            ['key' => 'price_label', 'label' => __('Harga'), 'sortable' => false],
+            ['key' => 'price_label', 'label' => __('Harga Aktif'), 'sortable' => false],
             ['key' => 'status_label', 'label' => __('Status'), 'sortable' => false],
         ];
     }
@@ -104,9 +120,15 @@ new #[Title('Barang Sampah')] class extends Component {
             ->find($this->historyItemId);
     }
 
+    #[Computed]
+    public function priceItem(): ?WasteItem
+    {
+        return $this->priceItemId ? WasteItem::find($this->priceItemId) : null;
+    }
+
     public function rules(): array
     {
-        return $this->wasteItemRules($this->editingId);
+        return $this->wasteItemRules($this->editingId, includePrice: $this->editingId === null);
     }
 
     public function startCreating(): void
@@ -139,22 +161,11 @@ new #[Title('Barang Sampah')] class extends Component {
         DB::transaction(function () use ($validated) {
             if ($this->editingId) {
                 $item = WasteItem::findOrFail($this->editingId);
-                $previousPrice = (float) $item->price_per_unit;
 
                 $item->update([
                     ...$validated,
                     'slug' => Str::slug($validated['name'].'-'.$validated['code']),
                 ]);
-
-                if ((float) $validated['price_per_unit'] !== $previousPrice) {
-                    WastePrice::create([
-                        'waste_item_id' => $item->id,
-                        'price_per_unit' => (float) $validated['price_per_unit'],
-                        'effective_from' => now()->toDateString(),
-                        'notes' => 'Harga diubah via menu Barang Sampah.',
-                        'created_by' => Auth::id(),
-                    ]);
-                }
 
                 $this->success(__('Barang berhasil diperbarui.'));
             } else {
@@ -208,6 +219,41 @@ new #[Title('Barang Sampah')] class extends Component {
         $this->historyModal = true;
     }
 
+    public function startSettingPrice(int $id): void
+    {
+        $this->resetPriceForm();
+        $this->priceItemId = $id;
+        $this->priceModal = true;
+    }
+
+    public function savePrice(): void
+    {
+        $validated = $this->validate([
+            'priceItemId' => ['required', 'integer', \Illuminate\Validation\Rule::exists(WasteItem::class, 'id')],
+            'price_new' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'price_effective_from' => ['required', 'date'],
+            'price_notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            WastePrice::create([
+                'waste_item_id' => $validated['priceItemId'],
+                'price_per_unit' => (float) $validated['price_new'],
+                'effective_from' => $validated['price_effective_from'],
+                'notes' => $validated['price_notes'] ?? null,
+                'created_by' => Auth::id(),
+            ]);
+
+            WasteItem::whereKey($validated['priceItemId'])
+                ->update(['price_per_unit' => (float) $validated['price_new']]);
+        });
+
+        $this->priceModal = false;
+        $this->success(__('Harga baru tersimpan.'));
+        $this->resetPriceForm();
+        unset($this->items);
+    }
+
     private function resetForm(): void
     {
         $this->reset(['editingId', 'waste_category_id', 'code', 'name', 'unit', 'price_per_unit', 'description', 'is_active']);
@@ -215,12 +261,19 @@ new #[Title('Barang Sampah')] class extends Component {
         $this->unit = 'kg';
         $this->resetErrorBag();
     }
+
+    private function resetPriceForm(): void
+    {
+        $this->reset(['priceItemId', 'price_new', 'price_notes']);
+        $this->price_effective_from = now()->toDateString();
+        $this->resetErrorBag();
+    }
 }; ?>
 
 <section class="w-full">
     <x-mary-header
         title="{{ __('Barang Sampah') }}"
-        subtitle="{{ __('Data master barang dengan harga per satuan. Setiap barang terkait ke satu kategori.') }}"
+        subtitle="{{ __('Master barang + riwayat harga. Ubah harga via tombol Set Harga agar riwayat tercatat.') }}"
         separator
         progress-indicator
     >
@@ -298,21 +351,34 @@ new #[Title('Barang Sampah')] class extends Component {
         @scope('actions', $row)
             <div class="flex items-center gap-1">
                 <x-mary-button
+                    icon="o-banknotes"
+                    wire:click="startSettingPrice({{ $row->id }})"
+                    class="btn-ghost btn-sm text-success"
+                    tooltip="{{ __('Set Harga') }}"
+                    aria-label="{{ __('Set harga untuk').' '.$row->name }}"
+                    data-test="item-set-price-{{ $row->id }}"
+                />
+                <x-mary-button
                     icon="o-clock"
                     wire:click="showHistory({{ $row->id }})"
                     class="btn-ghost btn-sm"
                     tooltip="{{ __('Riwayat harga') }}"
+                    aria-label="{{ __('Riwayat harga').' '.$row->name }}"
                 />
                 <x-mary-button
                     icon="o-pencil-square"
                     wire:click="startEditing({{ $row->id }})"
                     class="btn-ghost btn-sm"
+                    tooltip="{{ __('Edit barang') }}"
+                    aria-label="{{ __('Edit').' '.$row->name }}"
                     data-test="item-edit-{{ $row->id }}"
                 />
                 <x-mary-button
                     icon="o-trash"
                     wire:click="confirmDelete({{ $row->id }})"
                     class="btn-ghost btn-sm text-error"
+                    tooltip-left="{{ __('Hapus barang') }}"
+                    aria-label="{{ __('Hapus').' '.$row->name }}"
                     data-test="item-delete-{{ $row->id }}"
                 />
             </div>
@@ -322,7 +388,7 @@ new #[Title('Barang Sampah')] class extends Component {
     <x-mary-modal
         wire:model="formModal"
         title="{{ $editingId ? __('Edit Barang') : __('Tambah Barang') }}"
-        subtitle="{{ __('Pilih kategori, isi kode unik & harga per satuan. Ubah harga akan otomatis masuk riwayat.') }}"
+        subtitle="{{ $editingId ? __('Ubah metadata barang. Harga diatur lewat tombol Set Harga.') : __('Isi kategori, kode unik & harga awal. Riwayat harga tercatat otomatis.') }}"
         separator
         box-class="max-w-xl"
     >
@@ -355,15 +421,17 @@ new #[Title('Barang Sampah')] class extends Component {
 
             <div class="grid gap-3 md:grid-cols-2">
                 <x-mary-input wire:model="unit" label="{{ __('Satuan') }}" icon="o-scale" placeholder="kg" required />
-                <x-mary-input
-                    wire:model="price_per_unit"
-                    label="{{ __('Harga per satuan (Rp)') }}"
-                    icon="o-banknotes"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                />
+                @if (! $editingId)
+                    <x-mary-input
+                        wire:model="price_per_unit"
+                        label="{{ __('Harga awal (Rp)') }}"
+                        icon="o-banknotes"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        required
+                    />
+                @endif
             </div>
 
             <x-mary-textarea wire:model="description" label="{{ __('Deskripsi (opsional)') }}" rows="2" />
@@ -377,6 +445,50 @@ new #[Title('Barang Sampah')] class extends Component {
                     type="submit"
                     spinner="save"
                     data-test="item-save-button"
+                />
+            </x-slot:actions>
+        </x-mary-form>
+    </x-mary-modal>
+
+    <x-mary-modal
+        wire:model="priceModal"
+        title="{{ __('Set Harga Baru') }}"
+        subtitle="{{ $this->priceItem?->code }} — {{ $this->priceItem?->name }}"
+        separator
+        box-class="max-w-lg"
+    >
+        <x-mary-form wire:submit="savePrice" no-separator>
+            <x-mary-input
+                wire:model="price_new"
+                label="{{ __('Harga per satuan (Rp)') }}"
+                icon="o-banknotes"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+            />
+            <x-mary-input
+                wire:model="price_effective_from"
+                label="{{ __('Berlaku sejak') }}"
+                icon="o-calendar"
+                type="date"
+                required
+            />
+            <x-mary-textarea
+                wire:model="price_notes"
+                label="{{ __('Catatan (opsional)') }}"
+                placeholder="{{ __('Alasan perubahan harga...') }}"
+                rows="2"
+            />
+
+            <x-slot:actions>
+                <x-mary-button label="{{ __('Batal') }}" @click="$wire.priceModal = false" />
+                <x-mary-button
+                    label="{{ __('Simpan Harga') }}"
+                    class="btn-primary"
+                    type="submit"
+                    spinner="savePrice"
+                    data-test="price-save-button"
                 />
             </x-slot:actions>
         </x-mary-form>

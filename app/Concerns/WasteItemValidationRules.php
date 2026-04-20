@@ -13,9 +13,9 @@ trait WasteItemValidationRules
     /**
      * @return array<string, array<int, \Illuminate\Contracts\Validation\Rule|array<mixed>|string>>
      */
-    protected function wasteItemRules(?int $itemId = null): array
+    protected function wasteItemRules(?int $itemId = null, bool $includePrice = true): array
     {
-        return [
+        $rules = [
             'waste_category_id' => ['required', 'integer', Rule::exists(WasteCategory::class, 'id')],
             'code' => [
                 'required',
@@ -27,9 +27,14 @@ trait WasteItemValidationRules
             ],
             'name' => ['required', 'string', 'max:120'],
             'unit' => ['required', 'string', 'max:16'],
-            'price_per_unit' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
             'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['required', 'boolean'],
         ];
+
+        if ($includePrice) {
+            $rules['price_per_unit'] = ['required', 'numeric', 'min:0', 'max:99999999.99'];
+        }
+
+        return $rules;
     }
 }

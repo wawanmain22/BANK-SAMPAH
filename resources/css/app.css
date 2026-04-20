@@ -74,4 +74,9 @@
     ::file-selector-button {
         border-color: var(--color-base-300, currentColor);
     }
+
+    /* Hide Alpine-bound elements until x-data evaluates (prevents FOUC). */
+    [x-cloak] {
+        display: none !important;
+    }
 }

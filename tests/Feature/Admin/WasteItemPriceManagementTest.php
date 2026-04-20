@@ -11,7 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
 
-class WastePriceManagementTest extends TestCase
+class WasteItemPriceManagementTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -20,40 +20,19 @@ class WastePriceManagementTest extends TestCase
         return User::factory()->admin()->create();
     }
 
-    public function test_index_is_gated_by_role(): void
-    {
-        $this->get(route('admin.waste-price.index'))->assertRedirect(route('login'));
-
-        $this->actingAs(User::factory()->nasabah()->create())
-            ->get(route('admin.waste-price.index'))
-            ->assertForbidden();
-    }
-
-    public function test_only_active_items_are_listed(): void
-    {
-        WasteItem::factory()->create(['name' => 'Dus Bersih']);
-        WasteItem::factory()->inactive()->create(['name' => 'Sendal Karet']);
-
-        $this->actingAs($this->admin());
-
-        Livewire::test('pages::admin.waste-price.index')
-            ->assertSee('Dus Bersih')
-            ->assertDontSee('Sendal Karet');
-    }
-
-    public function test_admin_can_set_new_price(): void
+    public function test_admin_can_set_new_price_via_waste_item_page(): void
     {
         $item = WasteItem::factory()->create();
         $admin = $this->admin();
 
         $this->actingAs($admin);
 
-        Livewire::test('pages::admin.waste-price.index')
+        Livewire::test('pages::admin.waste-item.index')
             ->call('startSettingPrice', $item->id)
-            ->set('price_per_unit', '5000')
-            ->set('effective_from', now()->toDateString())
-            ->set('notes', 'Harga pasar naik')
-            ->call('save')
+            ->set('price_new', '5000')
+            ->set('price_effective_from', now()->toDateString())
+            ->set('price_notes', 'Harga pasar naik')
+            ->call('savePrice')
             ->assertHasNoErrors();
 
         $this->assertDatabaseHas('waste_prices', [
@@ -63,7 +42,6 @@ class WastePriceManagementTest extends TestCase
             'notes' => 'Harga pasar naik',
         ]);
 
-        // Denormalized current price on item is synced.
         $this->assertSame('5000.00', (string) $item->refresh()->price_per_unit);
     }
 
@@ -101,8 +79,23 @@ class WastePriceManagementTest extends TestCase
 
         $this->actingAs($this->admin());
 
-        Livewire::test('pages::admin.waste-price.index')
+        Livewire::test('pages::admin.waste-item.index')
             ->call('showHistory', $item->id)
             ->assertSee('Harga awal');
+    }
+
+    public function test_editing_item_does_not_require_price_field(): void
+    {
+        $item = WasteItem::factory()->create();
+
+        $this->actingAs($this->admin());
+
+        Livewire::test('pages::admin.waste-item.index')
+            ->call('startEditing', $item->id)
+            ->set('name', 'Updated Name')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame('Updated Name', $item->refresh()->name);
     }
 }

@@ -31,7 +31,7 @@ Dibangun dengan **Laravel 13 + Livewire 4 SFC + MaryUI** bertema **GreenNature**
 - Histori poin + tukar merchandise
 
 ### Panel Admin / Owner
-- **Master data** — Nasabah, Kategori Sampah, Harga Sampah, Produk, Mitra
+- **Master data** — Nasabah, Kategori Sampah, Barang Sampah (+ riwayat harga), Produk, Mitra
 - **Transaksi** — Nabung, Sedekah, Pencairan, Penjualan ke Mitra, Pengolahan, Tukar Poin
 - **Inventory & Release Saldo** — snapshot stok per kategori + alur release saldo setelah mitra membayar
 - **Histori Poin** & **Edukasi** (CMS artikel dengan cover + galeri)

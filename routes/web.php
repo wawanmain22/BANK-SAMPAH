@@ -48,7 +48,6 @@ Route::middleware(['auth', 'verified', 'role:admin,owner'])
         Route::livewire('nasabah', 'pages::admin.nasabah.index')->name('nasabah.index');
         Route::livewire('kategori-sampah', 'pages::admin.waste-category.index')->name('waste-category.index');
         Route::livewire('barang-sampah', 'pages::admin.waste-item.index')->name('waste-item.index');
-        Route::livewire('harga-sampah', 'pages::admin.waste-price.index')->name('waste-price.index');
         Route::livewire('master-poin', 'pages::admin.point-rule.index')->name('point-rule.index');
         Route::livewire('nabung', 'pages::admin.saving.index')->name('saving.index');
         Route::livewire('nabung/baru', 'pages::admin.saving.create')->name('saving.create');
