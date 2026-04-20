@@ -217,50 +217,22 @@
                 </a>
             </div>
 
-            {{-- Menu (native scroll survives wire:navigate via @persist; localStorage covers hard refresh). --}}
+            {{-- Menu. Hard refresh starts at top. wire:navigate preserves scroll via
+                 in-memory snapshot (Livewire zeroes internal scroll on navigation). --}}
             <div
+                id="nav-scroll-root"
                 class="flex-1 overflow-y-auto py-3"
                 x-data="{
-                    key: 'nav:scroll',
-                    lastKnown: 0,
                     init() {
-                        const saved = parseInt(localStorage.getItem(this.key) || '0', 10);
-                        if (saved > 0) this.$el.scrollTop = saved;
-                        this.lastKnown = saved;
-
-                        // wire:navigate scrolls the container to 0 BEFORE firing
-                        // `livewire:navigating`, so we cannot rely on that event
-                        // to snapshot the scroll. Instead mirror every live
-                        // scrollTop into lastKnown and write to localStorage at
-                        // the click moment (capture-phase, before Livewire).
-                        let raf = null;
-                        this.$el.addEventListener('scroll', () => {
-                            if (raf) cancelAnimationFrame(raf);
-                            raf = requestAnimationFrame(() => {
-                                const t = this.$el.scrollTop;
-                                if (t > 0) {
-                                    this.lastKnown = t;
-                                    localStorage.setItem(this.key, String(t));
-                                }
-                            });
-                        }, { passive: true });
-
+                        const el = this.$el;
                         document.addEventListener('click', (e) => {
                             const link = e.target.closest && e.target.closest('a[wire\\:navigate]');
-                            if (link && this.lastKnown > 0) {
-                                localStorage.setItem(this.key, String(this.lastKnown));
-                            }
+                            if (link) window.__sidebarScroll = el.scrollTop;
                         }, true);
-
                         document.addEventListener('livewire:navigated', () => {
-                            const restore = parseInt(localStorage.getItem(this.key) || '0', 10);
-                            if (restore > 0) {
-                                requestAnimationFrame(() => {
-                                    requestAnimationFrame(() => {
-                                        this.$el.scrollTop = restore;
-                                        this.lastKnown = restore;
-                                    });
-                                });
+                            const s = window.__sidebarScroll;
+                            if (typeof s === 'number' && s > 0) {
+                                requestAnimationFrame(() => { el.scrollTop = s; });
                             }
                         });
                     },
@@ -318,11 +290,12 @@
                                 class="px-2 space-y-0.5 mt-0.5"
                             >
                                 @foreach ($section['items'] as $item)
+                                    @php $itemActive = $isItemActive($item); @endphp
                                     <li>
                                         <a
                                             href="{{ $item['href'] }}"
                                             wire:navigate
-                                            class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
+                                            class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors {{ $itemActive ? 'bg-accent text-accent-content font-semibold shadow-sm' : 'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content' }}"
                                             :class="{
                                                 'bg-accent text-accent-content font-semibold shadow-sm': isActive({{ json_encode($item) }}),
                                                 'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content': !isActive({{ json_encode($item) }}),
@@ -344,11 +317,12 @@
 
                         <ul class="px-2 space-y-0.5">
                             @foreach ($section['items'] as $item)
+                                @php $itemActive = $isItemActive($item); @endphp
                                 <li>
                                     <a
                                         href="{{ $item['href'] }}"
                                         wire:navigate
-                                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
+                                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors {{ $itemActive ? 'bg-accent text-accent-content font-semibold shadow-sm' : 'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content' }}"
                                         :class="{
                                             'bg-accent text-accent-content font-semibold shadow-sm': isActive({{ json_encode($item) }}),
                                             'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content': !isActive({{ json_encode($item) }}),
