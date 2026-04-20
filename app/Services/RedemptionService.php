@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Balance;
@@ -11,11 +13,15 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Processes a member redemption: deducts points, decrements product stock,
- * logs a point_history row.
+ * Processes a member redemption: deducts points, decrements product stock
+ * via ProductInventoryService (audit trail), logs a point_history row.
  */
 class RedemptionService
 {
+    public function __construct(
+        private ProductInventoryService $productInventoryService,
+    ) {}
+
     public function create(
         User $nasabah,
         Product $product,
@@ -47,14 +53,8 @@ class RedemptionService
                 throw new InvalidArgumentException('Poin nasabah tidak cukup.');
             }
 
-            if ((float) $product->stock < $quantity) {
-                throw new InvalidArgumentException("Stok produk {$product->name} tidak cukup.");
-            }
-
             $balance->points = (int) $balance->points - $pointsUsed;
             $balance->save();
-
-            $product->decrement('stock', $quantity);
 
             $redemption = Redemption::create([
                 'user_id' => $nasabah->id,
@@ -67,6 +67,15 @@ class RedemptionService
                 'processed_by' => $processedBy?->id,
                 'redeemed_at' => now(),
             ]);
+
+            // Throws if stock insufficient — rolls back entire transaction.
+            $this->productInventoryService->remove(
+                product: $product,
+                quantity: $quantity,
+                reason: 'redemption',
+                sourceRef: $redemption,
+                createdBy: $processedBy,
+            );
 
             PointHistory::create([
                 'user_id' => $nasabah->id,

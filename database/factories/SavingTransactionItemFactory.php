@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\SavingTransaction;
 use App\Models\SavingTransactionItem;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -19,9 +21,11 @@ class SavingTransactionItemFactory extends Factory
 
         return [
             'saving_transaction_id' => SavingTransaction::factory(),
-            'waste_category_id' => WasteCategory::factory(),
+            'waste_item_id' => WasteItem::factory(),
             'waste_price_id' => null,
-            'category_name_snapshot' => fake()->words(2, true),
+            'item_code_snapshot' => strtoupper(fake()->bothify('??#')),
+            'item_name_snapshot' => ucfirst(fake()->words(2, true)),
+            'category_name_snapshot' => ucfirst(fake()->word()),
             'unit_snapshot' => 'kg',
             'price_per_unit_snapshot' => $price,
             'quantity' => $quantity,

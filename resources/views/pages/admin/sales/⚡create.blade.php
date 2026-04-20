@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\Inventory;
 use App\Models\Partner;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
+use App\Services\InventoryService;
 use App\Services\SalesTransactionService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -16,12 +18,12 @@ new #[Title('Penjualan Baru')] class extends Component {
 
     public string $notes = '';
 
-    /** @var array<int, array{waste_category_id: ?int, quantity: string, price_per_unit: string}> */
+    /** @var array<int, array{waste_item_id: ?int, quantity: string, price_per_unit: string}> */
     public array $items = [];
 
     public function mount(): void
     {
-        $this->items = [['waste_category_id' => null, 'quantity' => '', 'price_per_unit' => '']];
+        $this->items = [['waste_item_id' => null, 'quantity' => '', 'price_per_unit' => '']];
     }
 
     #[Computed]
@@ -35,21 +37,31 @@ new #[Title('Penjualan Baru')] class extends Component {
     }
 
     #[Computed]
-    public function categoryOptions(): array
+    public function itemOptions(): array
     {
-        return WasteCategory::active()
-            ->with(['inventory', 'currentPrice'])
-            ->orderBy('name')
+        $stocks = Inventory::query()
+            ->where('source', InventoryService::SOURCE_NABUNG)
+            ->pluck('stock', 'waste_item_id');
+
+        return WasteItem::active()
+            ->with('currentPrice')
+            ->orderBy('code')
             ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'name' => $c->name.' — '.__('stok').': '
-                    .rtrim(rtrim(number_format((float) ($c->inventory?->stock ?? 0), 3, ',', '.'), '0'), ',')
-                    .' '.$c->unit,
-                'stock' => (float) ($c->inventory?->stock ?? 0),
-                'unit' => $c->unit,
-                'suggested_price' => $c->currentPrice?->price_per_unit,
-            ])
+            ->map(function (WasteItem $wi) use ($stocks) {
+                $stock = (float) ($stocks[$wi->id] ?? 0);
+
+                return [
+                    'id' => $wi->id,
+                    'name' => "{$wi->code} — {$wi->name} · ".__('stok').': '
+                        .rtrim(rtrim(number_format($stock, 3, ',', '.'), '0'), ',')
+                        .' '.$wi->unit,
+                    'stock' => $stock,
+                    'unit' => $wi->unit,
+                    'suggested_price' => $wi->currentPrice?->price_per_unit,
+                ];
+            })
+            ->filter(fn ($opt) => $opt['stock'] > 0 || true) // keep all for visibility; validation enforces stock
+            ->values()
             ->toArray();
     }
 
@@ -72,7 +84,7 @@ new #[Title('Penjualan Baru')] class extends Component {
 
     public function addItem(): void
     {
-        $this->items[] = ['waste_category_id' => null, 'quantity' => '', 'price_per_unit' => ''];
+        $this->items[] = ['waste_item_id' => null, 'quantity' => '', 'price_per_unit' => ''];
     }
 
     public function removeItem(int $index): void
@@ -87,10 +99,9 @@ new #[Title('Penjualan Baru')] class extends Component {
 
     public function updatedItems($value, $key): void
     {
-        // Auto-fill suggested price when category chosen
-        if (str_ends_with($key, '.waste_category_id') && $value) {
+        if (str_ends_with($key, '.waste_item_id') && $value) {
             $idx = (int) explode('.', $key)[0];
-            $opt = collect($this->categoryOptions)->firstWhere('id', (int) $value);
+            $opt = collect($this->itemOptions)->firstWhere('id', (int) $value);
             if ($opt && $opt['suggested_price'] && empty($this->items[$idx]['price_per_unit'])) {
                 $this->items[$idx]['price_per_unit'] = (string) $opt['suggested_price'];
             }
@@ -103,7 +114,7 @@ new #[Title('Penjualan Baru')] class extends Component {
             'partner_id' => ['required', 'integer', 'exists:partners,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.waste_category_id' => ['required', 'integer', 'exists:waste_categories,id'],
+            'items.*.waste_item_id' => ['required', 'integer', 'exists:waste_items,id'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
             'items.*.price_per_unit' => ['required', 'numeric', 'min:0'],
         ];
@@ -119,7 +130,7 @@ new #[Title('Penjualan Baru')] class extends Component {
             $transaction = $service->create(
                 partner: $partner,
                 items: array_map(fn ($item) => [
-                    'waste_category_id' => (int) $item['waste_category_id'],
+                    'waste_item_id' => (int) $item['waste_item_id'],
                     'quantity' => (float) $item['quantity'],
                     'price_per_unit' => (float) $item['price_per_unit'],
                 ], $this->items),
@@ -140,13 +151,17 @@ new #[Title('Penjualan Baru')] class extends Component {
 <section class="w-full">
     <x-mary-header
         title="{{ __('Penjualan Baru') }}"
-        subtitle="{{ __('Pilih mitra dan input item sampah yang dijual. Harga jual bisa berbeda dari harga pasar.') }}"
+        subtitle="{{ __('Pilih mitra dan barang sampah nabung yang dijual. Harga jual bisa berbeda dari harga pasar.') }}"
         separator
     >
         <x-slot:actions>
             <x-mary-button label="{{ __('Batal') }}" icon="o-arrow-uturn-left" link="{{ route('admin.sales.index') }}" />
         </x-slot:actions>
     </x-mary-header>
+
+    <div class="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-base-content/80">
+        {{ __('Penjualan hanya boleh mengambil dari pool sampah nabung. Pool sedekah terpisah untuk pengolahan.') }}
+    </div>
 
     <form wire:submit="save" class="max-w-4xl space-y-6">
         <x-mary-select
@@ -174,7 +189,7 @@ new #[Title('Penjualan Baru')] class extends Component {
 
             @foreach ($items as $index => $item)
                 @php
-                    $categoryOpt = collect($this->categoryOptions)->firstWhere('id', $item['waste_category_id']);
+                    $itemOpt = collect($this->itemOptions)->firstWhere('id', $item['waste_item_id']);
                     $qty = (float) ($item['quantity'] ?? 0);
                     $price = (float) ($item['price_per_unit'] ?? 0);
                     $subtotal = round($qty * $price, 2);
@@ -184,23 +199,23 @@ new #[Title('Penjualan Baru')] class extends Component {
                         <div class="grid gap-3 md:grid-cols-12">
                             <div class="md:col-span-5">
                                 <x-mary-select
-                                    wire:model.live="items.{{ $index }}.waste_category_id"
-                                    label="{{ __('Kategori') }}"
-                                    :options="$this->categoryOptions"
+                                    wire:model.live="items.{{ $index }}.waste_item_id"
+                                    label="{{ __('Barang') }}"
+                                    :options="$this->itemOptions"
                                     option-label="name"
                                     option-value="id"
-                                    placeholder="{{ __('Pilih kategori') }}"
-                                    icon="o-tag"
+                                    placeholder="{{ __('Pilih barang') }}"
+                                    icon="o-hashtag"
                                 />
                             </div>
                             <div class="md:col-span-3">
                                 <x-mary-input
                                     wire:model.live="items.{{ $index }}.quantity"
-                                    label="{{ __('Berat') }}"
+                                    label="{{ __('Jumlah') }}"
                                     type="number"
                                     step="0.001"
                                     min="0"
-                                    :suffix="$categoryOpt['unit'] ?? 'kg'"
+                                    :suffix="$itemOpt['unit'] ?? 'kg'"
                                 />
                             </div>
                             <div class="md:col-span-3">
@@ -223,19 +238,19 @@ new #[Title('Penjualan Baru')] class extends Component {
                             </div>
                         </div>
 
-                        @if ($categoryOpt && $qty > 0)
+                        @if ($itemOpt && $qty > 0)
                             <div class="text-sm flex items-center justify-between">
                                 <div>
                                     <span class="text-base-content/60">{{ __('Subtotal') }}:</span>
                                     <span class="font-semibold ms-1">Rp {{ number_format($subtotal, 2, ',', '.') }}</span>
                                 </div>
-                                @if ($qty > $categoryOpt['stock'])
-                                    <x-mary-badge value="{{ __('Stok tidak cukup') }}" class="badge-error badge-soft" />
+                                @if ($qty > $itemOpt['stock'])
+                                    <x-mary-badge value="{{ __('Stok nabung tidak cukup') }}" class="badge-error badge-soft" />
                                 @endif
                             </div>
                         @endif
 
-                        @error("items.{$index}.waste_category_id")
+                        @error("items.{$index}.waste_item_id")
                             <div class="text-sm text-error">{{ $message }}</div>
                         @enderror
                         @error("items.{$index}.quantity")
@@ -254,7 +269,7 @@ new #[Title('Penjualan Baru')] class extends Component {
         <div class="rounded-xl border border-base-300 bg-base-100 p-4">
             <div class="flex items-center justify-between">
                 <div class="text-sm text-base-content/70">{{ __('Total berat') }}</div>
-                <div class="font-medium">{{ number_format($this->totalWeight, 3, ',', '.') }} kg</div>
+                <div class="font-medium">{{ number_format($this->totalWeight, 3, ',', '.') }}</div>
             </div>
             <div class="mt-2 flex items-center justify-between">
                 <div class="text-sm text-base-content/70">{{ __('Total nilai') }}</div>

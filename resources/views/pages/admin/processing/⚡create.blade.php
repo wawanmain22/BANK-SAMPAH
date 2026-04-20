@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\Inventory;
 use App\Models\Product;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
+use App\Services\InventoryService;
 use App\Services\ProcessingTransactionService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -14,7 +16,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
 
     public string $notes = '';
 
-    /** @var array<int, array{waste_category_id: ?int, quantity: string}> */
+    /** @var array<int, array{waste_item_id: ?int, quantity: string}> */
     public array $inputs = [];
 
     /** @var array<int, array{product_id: ?int, quantity: string}> */
@@ -22,25 +24,32 @@ new #[Title('Pengolahan Baru')] class extends Component {
 
     public function mount(): void
     {
-        $this->inputs = [['waste_category_id' => null, 'quantity' => '']];
+        $this->inputs = [['waste_item_id' => null, 'quantity' => '']];
         $this->outputs = [];
     }
 
     #[Computed]
-    public function categoryOptions(): array
+    public function itemOptions(): array
     {
-        return WasteCategory::active()
-            ->with('inventory')
-            ->orderBy('name')
-            ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'name' => $c->name.' — '.__('stok').': '
-                    .rtrim(rtrim(number_format((float) ($c->inventory?->stock ?? 0), 3, ',', '.'), '0'), ',')
-                    .' '.$c->unit,
-                'stock' => (float) ($c->inventory?->stock ?? 0),
-                'unit' => $c->unit,
-            ])
+        $stocks = Inventory::query()
+            ->where('source', InventoryService::SOURCE_SEDEKAH)
+            ->pluck('stock', 'waste_item_id');
+
+        return WasteItem::active()
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'unit'])
+            ->map(function (WasteItem $wi) use ($stocks) {
+                $stock = (float) ($stocks[$wi->id] ?? 0);
+
+                return [
+                    'id' => $wi->id,
+                    'name' => "{$wi->code} — {$wi->name} · ".__('stok').': '
+                        .rtrim(rtrim(number_format($stock, 3, ',', '.'), '0'), ',')
+                        .' '.$wi->unit,
+                    'stock' => $stock,
+                    'unit' => $wi->unit,
+                ];
+            })
             ->toArray();
     }
 
@@ -62,7 +71,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
 
     public function addInput(): void
     {
-        $this->inputs[] = ['waste_category_id' => null, 'quantity' => ''];
+        $this->inputs[] = ['waste_item_id' => null, 'quantity' => ''];
     }
 
     public function removeInput(int $index): void
@@ -91,7 +100,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
         $rules = [
             'notes' => ['nullable', 'string', 'max:1000'],
             'inputs' => ['required', 'array', 'min:1'],
-            'inputs.*.waste_category_id' => ['required', 'integer', 'exists:waste_categories,id'],
+            'inputs.*.waste_item_id' => ['required', 'integer', 'exists:waste_items,id'],
             'inputs.*.quantity' => ['required', 'numeric', 'gt:0'],
             'outputs' => ['array'],
         ];
@@ -111,7 +120,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
         try {
             $transaction = $service->create(
                 inputs: array_map(fn ($item) => [
-                    'waste_category_id' => (int) $item['waste_category_id'],
+                    'waste_item_id' => (int) $item['waste_item_id'],
                     'quantity' => (float) $item['quantity'],
                 ], $this->inputs),
                 outputs: array_map(fn ($item) => [
@@ -135,7 +144,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
 <section class="w-full">
     <x-mary-header
         title="{{ __('Pengolahan Baru') }}"
-        subtitle="{{ __('Input sampah yang dipakai (dari inventory) dan hasil produk olahan yang dihasilkan.') }}"
+        subtitle="{{ __('Input sampah sedekah yang dipakai + produk olahan yang dihasilkan.') }}"
         separator
     >
         <x-slot:actions>
@@ -143,11 +152,15 @@ new #[Title('Pengolahan Baru')] class extends Component {
         </x-slot:actions>
     </x-mary-header>
 
+    <div class="mb-4 rounded-lg border border-secondary/20 bg-secondary/5 p-3 text-sm text-base-content/80">
+        {{ __('Pengolahan hanya boleh mengambil dari pool sampah sedekah. Pool nabung terpisah untuk dijual ke mitra.') }}
+    </div>
+
     <form wire:submit="save" class="max-w-4xl space-y-6">
         {{-- Input section --}}
         <div class="space-y-3">
             <div class="flex items-center justify-between">
-                <h3 class="text-base font-semibold">{{ __('Input: Sampah yang dipakai') }}</h3>
+                <h3 class="text-base font-semibold">{{ __('Input: Sampah sedekah yang dipakai') }}</h3>
                 <x-mary-button
                     icon="o-plus"
                     label="{{ __('Tambah') }}"
@@ -159,7 +172,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
 
             @foreach ($inputs as $index => $item)
                 @php
-                    $categoryOpt = collect($this->categoryOptions)->firstWhere('id', $item['waste_category_id']);
+                    $itemOpt = collect($this->itemOptions)->firstWhere('id', $item['waste_item_id']);
                     $qty = (float) ($item['quantity'] ?? 0);
                 @endphp
                 <div wire:key="pin-{{ $index }}" class="card bg-base-100 border border-base-300">
@@ -167,23 +180,23 @@ new #[Title('Pengolahan Baru')] class extends Component {
                         <div class="grid gap-3 md:grid-cols-12">
                             <div class="md:col-span-8">
                                 <x-mary-select
-                                    wire:model.live="inputs.{{ $index }}.waste_category_id"
-                                    label="{{ __('Kategori sampah') }}"
-                                    :options="$this->categoryOptions"
+                                    wire:model.live="inputs.{{ $index }}.waste_item_id"
+                                    label="{{ __('Barang sampah') }}"
+                                    :options="$this->itemOptions"
                                     option-label="name"
                                     option-value="id"
-                                    placeholder="{{ __('Pilih kategori') }}"
-                                    icon="o-tag"
+                                    placeholder="{{ __('Pilih barang') }}"
+                                    icon="o-hashtag"
                                 />
                             </div>
                             <div class="md:col-span-3">
                                 <x-mary-input
                                     wire:model.live="inputs.{{ $index }}.quantity"
-                                    label="{{ __('Berat') }}"
+                                    label="{{ __('Jumlah') }}"
                                     type="number"
                                     step="0.001"
                                     min="0"
-                                    :suffix="$categoryOpt['unit'] ?? 'kg'"
+                                    :suffix="$itemOpt['unit'] ?? 'kg'"
                                 />
                             </div>
                             <div class="md:col-span-1 flex md:items-end">
@@ -196,11 +209,11 @@ new #[Title('Pengolahan Baru')] class extends Component {
                             </div>
                         </div>
 
-                        @if ($categoryOpt && $qty > 0 && $qty > $categoryOpt['stock'])
-                            <x-mary-badge value="{{ __('Stok tidak cukup') }}" class="badge-error badge-soft self-start" />
+                        @if ($itemOpt && $qty > 0 && $qty > $itemOpt['stock'])
+                            <x-mary-badge value="{{ __('Stok sedekah tidak cukup') }}" class="badge-error badge-soft self-start" />
                         @endif
 
-                        @error("inputs.{$index}.waste_category_id")
+                        @error("inputs.{$index}.waste_item_id")
                             <div class="text-sm text-error">{{ $message }}</div>
                         @enderror
                         @error("inputs.{$index}.quantity")
@@ -228,9 +241,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
             </div>
 
             @foreach ($outputs as $index => $item)
-                @php
-                    $productOpt = collect($this->productOptions)->firstWhere('id', $item['product_id']);
-                @endphp
+                @php $productOpt = collect($this->productOptions)->firstWhere('id', $item['product_id']); @endphp
                 <div wire:key="pout-{{ $index }}" class="card bg-base-100 border border-base-300">
                     <div class="card-body p-4 gap-2">
                         <div class="grid gap-3 md:grid-cols-12">
@@ -280,7 +291,7 @@ new #[Title('Pengolahan Baru')] class extends Component {
 
         <div class="rounded-xl border border-base-300 bg-base-100 p-4 flex items-center justify-between">
             <div class="text-sm text-base-content/70">{{ __('Total input') }}</div>
-            <div class="text-lg font-bold">{{ number_format($this->totalInput, 3, ',', '.') }} kg</div>
+            <div class="text-lg font-bold">{{ number_format($this->totalInput, 3, ',', '.') }}</div>
         </div>
 
         <div class="flex justify-end gap-2">

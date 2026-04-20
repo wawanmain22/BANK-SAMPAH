@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use App\Models\WastePrice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -27,27 +29,27 @@ class WastePriceManagementTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_only_active_categories_are_listed(): void
+    public function test_only_active_items_are_listed(): void
     {
-        $active = WasteCategory::factory()->create(['name' => 'Plastik']);
-        $inactive = WasteCategory::factory()->inactive()->create(['name' => 'Kaca']);
+        WasteItem::factory()->create(['name' => 'Dus Bersih']);
+        WasteItem::factory()->inactive()->create(['name' => 'Sendal Karet']);
 
         $this->actingAs($this->admin());
 
         Livewire::test('pages::admin.waste-price.index')
-            ->assertSee('Plastik')
-            ->assertDontSee('Kaca');
+            ->assertSee('Dus Bersih')
+            ->assertDontSee('Sendal Karet');
     }
 
     public function test_admin_can_set_new_price(): void
     {
-        $category = WasteCategory::factory()->create();
+        $item = WasteItem::factory()->create();
         $admin = $this->admin();
 
         $this->actingAs($admin);
 
         Livewire::test('pages::admin.waste-price.index')
-            ->call('startSettingPrice', $category->id)
+            ->call('startSettingPrice', $item->id)
             ->set('price_per_unit', '5000')
             ->set('effective_from', now()->toDateString())
             ->set('notes', 'Harga pasar naik')
@@ -55,41 +57,44 @@ class WastePriceManagementTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertDatabaseHas('waste_prices', [
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
             'price_per_unit' => '5000.00',
             'created_by' => $admin->id,
             'notes' => 'Harga pasar naik',
         ]);
+
+        // Denormalized current price on item is synced.
+        $this->assertSame('5000.00', (string) $item->refresh()->price_per_unit);
     }
 
     public function test_current_price_returns_latest_effective(): void
     {
-        $category = WasteCategory::factory()->create();
+        $item = WasteItem::factory()->create();
 
         WastePrice::factory()->create([
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
             'price_per_unit' => 1000,
             'effective_from' => now()->subDays(10)->toDateString(),
         ]);
         WastePrice::factory()->create([
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
             'price_per_unit' => 2000,
             'effective_from' => now()->subDay()->toDateString(),
         ]);
         WastePrice::factory()->create([
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
             'price_per_unit' => 3000,
             'effective_from' => now()->addDay()->toDateString(),
         ]);
 
-        $this->assertSame('2000.00', (string) $category->currentPrice()->value('price_per_unit'));
+        $this->assertSame('2000.00', (string) $item->currentPrice()->value('price_per_unit'));
     }
 
-    public function test_history_modal_loads_prices_for_category(): void
+    public function test_history_modal_loads_prices_for_item(): void
     {
-        $category = WasteCategory::factory()->create(['name' => 'Plastik Botol']);
+        $item = WasteItem::factory()->create(['name' => 'PET Botol Bersih']);
         WastePrice::factory()->create([
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
             'price_per_unit' => 1500,
             'notes' => 'Harga awal',
         ]);
@@ -97,7 +102,7 @@ class WastePriceManagementTest extends TestCase
         $this->actingAs($this->admin());
 
         Livewire::test('pages::admin.waste-price.index')
-            ->call('showHistory', $category->id)
+            ->call('showHistory', $item->id)
             ->assertSee('Harga awal');
     }
 }

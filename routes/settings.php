@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Features;
 
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile')->name('settings.index');
@@ -11,13 +12,5 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('settings/security', 'pages::settings.security')
-        ->middleware(
-            when(
-                Features::canManageTwoFactorAuthentication()
-                    && Features::optionEnabled(Features::twoFactorAuthentication(), 'confirmPassword'),
-                ['password.confirm'],
-                [],
-            ),
-        )
         ->name('security.edit');
 });

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\SavingTransactionItemFactory;
@@ -10,8 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'saving_transaction_id',
-    'waste_category_id',
+    'waste_item_id',
     'waste_price_id',
+    'item_code_snapshot',
+    'item_name_snapshot',
     'category_name_snapshot',
     'unit_snapshot',
     'price_per_unit_snapshot',
@@ -37,9 +41,9 @@ class SavingTransactionItem extends Model
         return $this->belongsTo(SavingTransaction::class, 'saving_transaction_id');
     }
 
-    public function category(): BelongsTo
+    public function item(): BelongsTo
     {
-        return $this->belongsTo(WasteCategory::class, 'waste_category_id');
+        return $this->belongsTo(WasteItem::class, 'waste_item_id');
     }
 
     public function price(): BelongsTo

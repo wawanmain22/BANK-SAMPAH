@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Admin;
 
 use App\Models\SavingTransaction;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use App\Models\WastePrice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -19,16 +21,16 @@ class SavingManagementTest extends TestCase
         return User::factory()->admin()->create();
     }
 
-    private function categoryWithPrice(float $price = 3000): WasteCategory
+    private function itemWithPrice(float $price = 3000): WasteItem
     {
-        $category = WasteCategory::factory()->create();
+        $item = WasteItem::factory()->create(['price_per_unit' => $price]);
         WastePrice::factory()->create([
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
             'price_per_unit' => $price,
             'effective_from' => now()->subDay()->toDateString(),
         ]);
 
-        return $category->fresh('currentPrice');
+        return $item->fresh('currentPrice');
     }
 
     public function test_index_is_gated_by_role(): void
@@ -57,14 +59,14 @@ class SavingManagementTest extends TestCase
     public function test_admin_can_create_transaction_via_form(): void
     {
         $nasabah = User::factory()->nasabah()->create(['is_member' => true]);
-        $cat = $this->categoryWithPrice(4000);
+        $item = $this->itemWithPrice(4000);
         $admin = $this->admin();
 
         $this->actingAs($admin);
 
         Livewire::test('pages::admin.saving.create')
             ->set('user_id', $nasabah->id)
-            ->set('items.0.waste_category_id', $cat->id)
+            ->set('items.0.waste_item_id', $item->id)
             ->set('items.0.quantity', '2.5')
             ->set('notes', 'Tes UI')
             ->call('save')
@@ -85,7 +87,7 @@ class SavingManagementTest extends TestCase
 
         Livewire::test('pages::admin.saving.create')
             ->call('save')
-            ->assertHasErrors(['user_id', 'items.0.waste_category_id', 'items.0.quantity']);
+            ->assertHasErrors(['user_id', 'items.0.waste_item_id', 'items.0.quantity']);
     }
 
     public function test_can_add_and_remove_items_dynamically(): void

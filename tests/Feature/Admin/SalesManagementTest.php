@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Admin;
 
 use App\Models\Partner;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -23,14 +25,20 @@ class SalesManagementTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $partner = Partner::factory()->create();
-        $category = WasteCategory::factory()->create();
-        app(InventoryService::class)->add($category, 20, 'adjustment');
+        $item = WasteItem::factory()->create();
+
+        app(InventoryService::class)->add(
+            item: $item,
+            source: InventoryService::SOURCE_NABUNG,
+            quantity: 20,
+            reason: 'adjustment',
+        );
 
         $this->actingAs($admin);
 
         Livewire::test('pages::admin.sales.create')
             ->set('partner_id', $partner->id)
-            ->set('items.0.waste_category_id', $category->id)
+            ->set('items.0.waste_item_id', $item->id)
             ->set('items.0.quantity', '5')
             ->set('items.0.price_per_unit', '4500')
             ->call('save')
@@ -51,6 +59,6 @@ class SalesManagementTest extends TestCase
 
         Livewire::test('pages::admin.sales.create')
             ->call('save')
-            ->assertHasErrors(['partner_id', 'items.0.waste_category_id', 'items.0.quantity', 'items.0.price_per_unit']);
+            ->assertHasErrors(['partner_id', 'items.0.waste_item_id', 'items.0.quantity', 'items.0.price_per_unit']);
     }
 }

@@ -1,20 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Partner;
 use App\Models\SalesTransaction;
 use App\Models\SalesTransactionItem;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
  * Records a sale of waste to a mitra (partner).
  *
- * Decrements inventory per item and stores the agreed sell price, which may
- * differ from the current category price (mitra negotiate per delivery).
+ * Only consumes from the `nabung` inventory pool — sampah sedekah is reserved
+ * for processing and cannot be sold to mitra.
  */
 class SalesTransactionService
 {
@@ -23,7 +25,7 @@ class SalesTransactionService
     ) {}
 
     /**
-     * @param  array<int, array{waste_category_id: int, quantity: float|string, price_per_unit: float|string}>  $items
+     * @param  array<int, array{waste_item_id: int, quantity: float|string, price_per_unit: float|string}>  $items
      */
     public function create(
         Partner $partner,
@@ -41,7 +43,7 @@ class SalesTransactionService
             $totalValue = 0.0;
 
             foreach ($items as $item) {
-                $category = WasteCategory::findOrFail($item['waste_category_id']);
+                $wasteItem = WasteItem::with('category')->findOrFail($item['waste_item_id']);
                 $quantity = (float) $item['quantity'];
                 $price = (float) $item['price_per_unit'];
 
@@ -56,7 +58,7 @@ class SalesTransactionService
                 $subtotal = round($quantity * $price, 2);
 
                 $prepared[] = [
-                    'category' => $category,
+                    'item' => $wasteItem,
                     'quantity' => $quantity,
                     'price' => $price,
                     'subtotal' => $subtotal,
@@ -76,22 +78,27 @@ class SalesTransactionService
             ]);
 
             foreach ($prepared as $row) {
+                $wasteItem = $row['item'];
+
                 SalesTransactionItem::create([
                     'sales_transaction_id' => $transaction->id,
-                    'waste_category_id' => $row['category']->id,
-                    'category_name_snapshot' => $row['category']->name,
-                    'unit_snapshot' => $row['category']->unit,
+                    'waste_item_id' => $wasteItem->id,
+                    'item_code_snapshot' => $wasteItem->code,
+                    'item_name_snapshot' => $wasteItem->name,
+                    'category_name_snapshot' => $wasteItem->category->name,
+                    'unit_snapshot' => $wasteItem->unit,
                     'price_per_unit' => $row['price'],
                     'quantity' => $row['quantity'],
                     'subtotal' => $row['subtotal'],
                 ]);
 
-                // Will throw if stock insufficient - rolls back entire transaction
+                // Throws if nabung stock insufficient — rolls back entire transaction.
                 $this->inventoryService->remove(
-                    category: $row['category'],
+                    item: $wasteItem,
+                    source: InventoryService::SOURCE_NABUNG,
                     quantity: $row['quantity'],
                     reason: 'sale',
-                    source: $transaction,
+                    sourceRef: $transaction,
                     createdBy: $createdBy,
                 );
             }

@@ -26,6 +26,8 @@ new #[Title('Produk')] class extends Component {
 
     public string $price = '';
 
+    public string $points_cost = '0';
+
     public bool $is_active = true;
 
     public ?int $deletingId = null;
@@ -46,6 +48,7 @@ new #[Title('Produk')] class extends Component {
             ['key' => 'name', 'label' => __('Produk'), 'sortable' => false],
             ['key' => 'unit', 'label' => __('Satuan'), 'class' => 'hidden md:table-cell'],
             ['key' => 'price_label', 'label' => __('Harga'), 'sortable' => false],
+            ['key' => 'points_cost_label', 'label' => __('Poin Tukar'), 'class' => 'hidden md:table-cell', 'sortable' => false],
             ['key' => 'stock_label', 'label' => __('Stok'), 'class' => 'hidden lg:table-cell', 'sortable' => false],
             ['key' => 'status_label', 'label' => __('Status'), 'sortable' => false],
         ];
@@ -81,6 +84,7 @@ new #[Title('Produk')] class extends Component {
         $this->image = (string) ($product->image ?? '');
         $this->unit = $product->unit;
         $this->price = (string) $product->price;
+        $this->points_cost = (string) (int) $product->points_cost;
         $this->is_active = (bool) $product->is_active;
 
         $this->formModal = true;
@@ -131,6 +135,7 @@ new #[Title('Produk')] class extends Component {
     private function resetForm(): void
     {
         $this->reset(['editingId', 'name', 'description', 'image', 'price']);
+        $this->points_cost = '0';
         $this->unit = 'pcs';
         $this->is_active = true;
         $this->resetErrorBag();
@@ -140,7 +145,7 @@ new #[Title('Produk')] class extends Component {
 <section class="w-full">
     <x-mary-header
         title="{{ __('Produk Hasil Olahan') }}"
-        subtitle="{{ __('Master data produk seperti paving block, kompos, kursi, pakan ternak.') }}"
+        subtitle="{{ __('Master data produk seperti paving block, kompos, kursi, pakan ternak. Set harga jual + poin tukar per produk.') }}"
         separator
         progress-indicator
     >
@@ -180,6 +185,14 @@ new #[Title('Produk')] class extends Component {
             <span class="font-medium">Rp {{ number_format((float) $row->price, 0, ',', '.') }}</span>
         @endscope
 
+        @scope('cell_points_cost_label', $row)
+            @if ((int) $row->points_cost > 0)
+                <span class="font-semibold text-accent">{{ number_format((int) $row->points_cost, 0, ',', '.') }} poin</span>
+            @else
+                <span class="text-base-content/40" aria-label="{{ __('Belum di-set') }}">—</span>
+            @endif
+        @endscope
+
         @scope('cell_stock_label', $row)
             {{ rtrim(rtrim(number_format((float) $row->stock, 3, ',', '.'), '0'), ',') }}
             <span class="text-xs text-base-content/60">{{ $row->unit }}</span>
@@ -205,15 +218,24 @@ new #[Title('Produk')] class extends Component {
         wire:model="formModal"
         title="{{ $editingId ? __('Edit Produk') : __('Tambah Produk') }}"
         separator
-        box-class="max-w-lg"
+        box-class="max-w-xl"
     >
         <x-mary-form wire:submit="save" no-separator>
             <x-mary-input wire:model="name" label="{{ __('Nama produk') }}" icon="o-cube" required />
             <x-mary-textarea wire:model="description" label="{{ __('Deskripsi') }}" rows="2" />
             <x-mary-input wire:model="image" label="{{ __('URL gambar produk') }}" icon="o-photo" placeholder="/images/demo/merchandise.jpg" />
-            <div class="grid gap-3 md:grid-cols-2">
+            <div class="grid gap-3 md:grid-cols-3">
                 <x-mary-input wire:model="unit" label="{{ __('Satuan') }}" icon="o-scale" placeholder="pcs" required />
                 <x-mary-input wire:model="price" label="{{ __('Harga jual') }}" type="number" step="0.01" min="0" prefix="Rp" required />
+                <x-mary-input
+                    wire:model="points_cost"
+                    label="{{ __('Poin untuk Tukar') }}"
+                    icon="o-sparkles"
+                    type="number"
+                    min="0"
+                    hint="{{ __('Poin member per 1 unit. 0 = tidak bisa ditukar poin.') }}"
+                    required
+                />
             </div>
             <x-mary-toggle wire:model="is_active" label="{{ __('Aktif') }}" right />
 

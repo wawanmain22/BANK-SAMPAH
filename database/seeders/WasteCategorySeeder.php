@@ -1,9 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\WasteCategory;
-use App\Models\WastePrice;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -11,35 +12,25 @@ class WasteCategorySeeder extends Seeder
 {
     public function run(): void
     {
-        $seedData = [
-            ['name' => 'Plastik Botol PET', 'unit' => 'kg', 'price' => 3500],
-            ['name' => 'Plastik Kresek', 'unit' => 'kg', 'price' => 1000],
-            ['name' => 'Kardus', 'unit' => 'kg', 'price' => 2500],
-            ['name' => 'Kertas Putih', 'unit' => 'kg', 'price' => 2000],
-            ['name' => 'Kertas Koran', 'unit' => 'kg', 'price' => 1500],
-            ['name' => 'Besi', 'unit' => 'kg', 'price' => 5000],
-            ['name' => 'Aluminium', 'unit' => 'kg', 'price' => 12000],
-            ['name' => 'Kaca', 'unit' => 'kg', 'price' => 500],
+        $groups = [
+            ['name' => 'Kertas', 'code_prefix' => 'KT', 'description' => 'Dus, duplex, arsip, buku bekas.'],
+            ['name' => 'Logam', 'code_prefix' => 'LG', 'description' => 'Besi, kaleng, tembaga, seng, aluminium.'],
+            ['name' => 'Botol', 'code_prefix' => 'BL', 'description' => 'Botol kaca bening, botol warna, beling.'],
+            ['name' => 'Plastik', 'code_prefix' => 'PL', 'description' => 'PET, kresek, galon, jenis plastik lain.'],
+            ['name' => 'Lain-lain', 'code_prefix' => 'L', 'description' => 'Karpet, sandal karet, minyak jelantah, fiber, paralon.'],
+            ['name' => 'Residu', 'code_prefix' => 'R', 'description' => 'Sampah multilayer tak terdaur.'],
         ];
 
-        foreach ($seedData as $item) {
-            $category = WasteCategory::query()->firstOrCreate(
-                ['slug' => Str::slug($item['name'])],
+        foreach ($groups as $group) {
+            WasteCategory::query()->firstOrCreate(
+                ['code_prefix' => $group['code_prefix']],
                 [
-                    'name' => $item['name'],
-                    'unit' => $item['unit'],
+                    'name' => $group['name'],
+                    'slug' => Str::slug($group['name']),
+                    'description' => $group['description'],
                     'is_active' => true,
                 ],
             );
-
-            if (! $category->prices()->exists()) {
-                WastePrice::create([
-                    'waste_category_id' => $category->id,
-                    'price_per_unit' => $item['price'],
-                    'effective_from' => now()->toDateString(),
-                    'notes' => 'Harga awal seed.',
-                ]);
-            }
         }
     }
 }

@@ -1,19 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\SedekahTransaction;
 use App\Models\SedekahTransactionItem;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
  * Records a sedekah (donated waste) transaction.
  *
- * Unlike saving, sedekah produces NO saldo and NO points — the donated waste
- * simply flows into inventory for later processing or sale.
+ * Produces NO saldo and NO points — the donated waste flows into the `sedekah`
+ * inventory pool, later consumed by waste processing into products.
  */
 class SedekahTransactionService
 {
@@ -22,7 +24,7 @@ class SedekahTransactionService
     ) {}
 
     /**
-     * @param  array<int, array{waste_category_id: int, quantity: float|string}>  $items
+     * @param  array<int, array{waste_item_id: int, quantity: float|string}>  $items
      */
     public function create(
         array $items,
@@ -44,7 +46,7 @@ class SedekahTransactionService
             $totalWeight = 0.0;
 
             foreach ($items as $item) {
-                $category = WasteCategory::findOrFail($item['waste_category_id']);
+                $wasteItem = WasteItem::with('category')->findOrFail($item['waste_item_id']);
                 $quantity = (float) $item['quantity'];
 
                 if ($quantity <= 0) {
@@ -52,7 +54,7 @@ class SedekahTransactionService
                 }
 
                 $prepared[] = [
-                    'category' => $category,
+                    'item' => $wasteItem,
                     'quantity' => $quantity,
                 ];
                 $totalWeight += $quantity;
@@ -68,19 +70,24 @@ class SedekahTransactionService
             ]);
 
             foreach ($prepared as $row) {
+                $wasteItem = $row['item'];
+
                 SedekahTransactionItem::create([
                     'sedekah_transaction_id' => $transaction->id,
-                    'waste_category_id' => $row['category']->id,
-                    'category_name_snapshot' => $row['category']->name,
-                    'unit_snapshot' => $row['category']->unit,
+                    'waste_item_id' => $wasteItem->id,
+                    'item_code_snapshot' => $wasteItem->code,
+                    'item_name_snapshot' => $wasteItem->name,
+                    'category_name_snapshot' => $wasteItem->category->name,
+                    'unit_snapshot' => $wasteItem->unit,
                     'quantity' => $row['quantity'],
                 ]);
 
                 $this->inventoryService->add(
-                    category: $row['category'],
+                    item: $wasteItem,
+                    source: InventoryService::SOURCE_SEDEKAH,
                     quantity: $row['quantity'],
                     reason: 'sedekah',
-                    source: $transaction,
+                    sourceRef: $transaction,
                     createdBy: $createdBy,
                 );
             }

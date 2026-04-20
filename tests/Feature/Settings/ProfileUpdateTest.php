@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Settings;
 
 use App\Models\User;
@@ -18,7 +20,7 @@ class ProfileUpdateTest extends TestCase
         $this->get(route('profile.edit'))->assertOk();
     }
 
-    public function test_profile_information_can_be_updated(): void
+    public function test_name_can_be_updated(): void
     {
         $user = User::factory()->create();
 
@@ -26,7 +28,6 @@ class ProfileUpdateTest extends TestCase
 
         $response = Livewire::test('pages::settings.profile')
             ->set('name', 'Test User')
-            ->set('email', 'test@example.com')
             ->call('updateProfileInformation');
 
         $response->assertHasNoErrors();
@@ -34,24 +35,27 @@ class ProfileUpdateTest extends TestCase
         $user->refresh();
 
         $this->assertEquals('Test User', $user->name);
-        $this->assertEquals('test@example.com', $user->email);
-        $this->assertNull($user->email_verified_at);
     }
 
-    public function test_email_verification_status_is_unchanged_when_email_address_is_unchanged(): void
+    public function test_email_cannot_be_changed_via_profile_form(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['email' => 'original@example.com']);
 
         $this->actingAs($user);
 
-        $response = Livewire::test('pages::settings.profile')
-            ->set('name', 'Test User')
-            ->set('email', $user->email)
-            ->call('updateProfileInformation');
+        Livewire::test('pages::settings.profile')
+            ->set('name', 'New Name')
+            ->set('email', 'hacker@example.com')
+            ->call('updateProfileInformation')
+            ->assertHasNoErrors();
 
-        $response->assertHasNoErrors();
+        $user->refresh();
 
-        $this->assertNotNull($user->refresh()->email_verified_at);
+        $this->assertSame('New Name', $user->name);
+        // Email must stay unchanged even if payload tries to override.
+        $this->assertSame('original@example.com', $user->email);
+        // Verification timestamp untouched — email wasn't actually changed.
+        $this->assertNotNull($user->email_verified_at);
     }
 
     public function test_user_can_delete_their_account(): void

@@ -48,26 +48,90 @@
     }
 
     if ($isStaff) {
-        $navSections[] = [
-            'label' => __('Operasional'),
-            'items' => [
-                ['label' => __('Nasabah'), 'icon' => 'o-users', 'href' => route('admin.nasabah.index'), 'active' => request()->routeIs('admin.nasabah.*')],
-                ['label' => __('Kategori Sampah'), 'icon' => 'o-tag', 'href' => route('admin.waste-category.index'), 'active' => request()->routeIs('admin.waste-category.*')],
-                ['label' => __('Harga Sampah'), 'icon' => 'o-banknotes', 'href' => route('admin.waste-price.index'), 'active' => request()->routeIs('admin.waste-price.*')],
-                ['label' => __('Nabung'), 'icon' => 'o-arrow-trending-up', 'href' => route('admin.saving.index'), 'active' => request()->routeIs('admin.saving.*')],
-                ['label' => __('Sedekah'), 'icon' => 'o-heart', 'href' => route('admin.sedekah.index'), 'active' => request()->routeIs('admin.sedekah.*')],
-                ['label' => __('Inventory'), 'icon' => 'o-archive-box', 'href' => route('admin.inventory.index'), 'active' => request()->routeIs('admin.inventory.*')],
-                ['label' => __('Mitra'), 'icon' => 'o-building-office', 'href' => route('admin.partner.index'), 'active' => request()->routeIs('admin.partner.*')],
-                ['label' => __('Penjualan'), 'icon' => 'o-truck', 'href' => route('admin.sales.index'), 'active' => request()->routeIs('admin.sales.*')],
-                ['label' => __('Produk'), 'icon' => 'o-cube', 'href' => route('admin.product.index'), 'active' => request()->routeIs('admin.product.*')],
-                ['label' => __('Pengolahan'), 'icon' => 'o-cog-8-tooth', 'href' => route('admin.processing.index'), 'active' => request()->routeIs('admin.processing.*')],
-                ['label' => __('Release Saldo'), 'icon' => 'o-arrow-right-circle', 'href' => route('admin.release.index'), 'active' => request()->routeIs('admin.release.*')],
-                ['label' => __('Pencairan'), 'icon' => 'o-wallet', 'href' => route('admin.withdrawal.index'), 'active' => request()->routeIs('admin.withdrawal.*')],
-                ['label' => __('Tukar Poin'), 'icon' => 'o-gift', 'href' => route('admin.redemption.index'), 'active' => request()->routeIs('admin.redemption.*')],
-                ['label' => __('Histori Poin'), 'icon' => 'o-sparkles', 'href' => route('admin.point-history.index'), 'active' => request()->routeIs('admin.point-history.*')],
-                ['label' => __('Edukasi'), 'icon' => 'o-book-open', 'href' => route('admin.article.index'), 'active' => request()->routeIs('admin.article.*')],
+        $inventorySource = request()->query('source', 'nabung');
+        $inventoryOnIndex = request()->routeIs('admin.inventory.*');
+
+        $staffGroups = [
+            [
+                'label' => __('Manajemen'),
+                'key' => 'manajemen',
+                'default_open' => false,
+                'items' => [
+                    ['label' => __('Nasabah'), 'icon' => 'o-users', 'href' => route('admin.nasabah.index'), 'active' => request()->routeIs('admin.nasabah.*')],
+                ],
+            ],
+            [
+                'label' => __('Master Data'),
+                'key' => 'master',
+                'default_open' => true,
+                'items' => [
+                    ['label' => __('Kategori Sampah'), 'icon' => 'o-tag', 'href' => route('admin.waste-category.index'), 'active' => request()->routeIs('admin.waste-category.*')],
+                    ['label' => __('Barang Sampah'), 'icon' => 'o-hashtag', 'href' => route('admin.waste-item.index'), 'active' => request()->routeIs('admin.waste-item.*')],
+                    ['label' => __('Harga Sampah'), 'icon' => 'o-banknotes', 'href' => route('admin.waste-price.index'), 'active' => request()->routeIs('admin.waste-price.*')],
+                    ['label' => __('Mitra'), 'icon' => 'o-building-office', 'href' => route('admin.partner.index'), 'active' => request()->routeIs('admin.partner.*')],
+                    ['label' => __('Produk'), 'icon' => 'o-cube', 'href' => route('admin.product.index'), 'active' => request()->routeIs('admin.product.*')],
+                    ['label' => __('Master Poin'), 'icon' => 'o-star', 'href' => route('admin.point-rule.index'), 'active' => request()->routeIs('admin.point-rule.*')],
+                ],
+            ],
+            [
+                'label' => __('Transaksi'),
+                'key' => 'transaksi',
+                'default_open' => true,
+                'items' => [
+                    ['label' => __('Nabung'), 'icon' => 'o-arrow-trending-up', 'href' => route('admin.saving.index'), 'active' => request()->routeIs('admin.saving.*')],
+                    ['label' => __('Sedekah'), 'icon' => 'o-heart', 'href' => route('admin.sedekah.index'), 'active' => request()->routeIs('admin.sedekah.*')],
+                    ['label' => __('Penjualan ke Mitra'), 'icon' => 'o-truck', 'href' => route('admin.sales.index'), 'active' => request()->routeIs('admin.sales.*')],
+                    ['label' => __('Pengolahan'), 'icon' => 'o-cog-8-tooth', 'href' => route('admin.processing.index'), 'active' => request()->routeIs('admin.processing.*')],
+                    ['label' => __('Penjualan Produk'), 'icon' => 'o-shopping-bag', 'href' => route('admin.product-sale.index'), 'active' => request()->routeIs('admin.product-sale.*')],
+                ],
+            ],
+            [
+                'label' => __('Inventory'),
+                'key' => 'inventory',
+                'default_open' => true,
+                'items' => [
+                    ['label' => __('Inventory Nabung'), 'icon' => 'o-archive-box', 'href' => route('admin.inventory.index', ['source' => 'nabung']), 'active' => $inventoryOnIndex && $inventorySource === 'nabung'],
+                    ['label' => __('Inventory Sedekah'), 'icon' => 'o-gift', 'href' => route('admin.inventory.index', ['source' => 'sedekah']), 'active' => $inventoryOnIndex && $inventorySource === 'sedekah'],
+                ],
+            ],
+            [
+                'label' => __('Keuangan'),
+                'key' => 'keuangan',
+                'default_open' => true,
+                'items' => [
+                    ['label' => __('Release Saldo'), 'icon' => 'o-arrow-right-circle', 'href' => route('admin.release.index'), 'active' => request()->routeIs('admin.release.*')],
+                    ['label' => __('Pencairan'), 'icon' => 'o-wallet', 'href' => route('admin.withdrawal.index'), 'active' => request()->routeIs('admin.withdrawal.*')],
+                ],
+            ],
+            [
+                'label' => __('Loyalti'),
+                'key' => 'loyalti',
+                'default_open' => false,
+                'items' => [
+                    ['label' => __('Tukar Poin → Produk'), 'icon' => 'o-gift', 'href' => route('admin.redemption.index'), 'active' => request()->routeIs('admin.redemption.*')],
+                    ['label' => __('Tukar Poin → Saldo'), 'icon' => 'o-banknotes', 'href' => route('admin.point-cash-out.index'), 'active' => request()->routeIs('admin.point-cash-out.*')],
+                    ['label' => __('Histori Poin'), 'icon' => 'o-sparkles', 'href' => route('admin.point-history.index'), 'active' => request()->routeIs('admin.point-history.*')],
+                ],
+            ],
+            [
+                'label' => __('Konten'),
+                'key' => 'konten',
+                'default_open' => false,
+                'items' => [
+                    ['label' => __('Edukasi'), 'icon' => 'o-book-open', 'href' => route('admin.article.index'), 'active' => request()->routeIs('admin.article.*')],
+                ],
             ],
         ];
+
+        foreach ($staffGroups as $group) {
+            $navSections[] = [
+                'label' => $group['label'],
+                'key' => $group['key'],
+                'collapsible' => true,
+                'default_open' => $group['default_open'],
+                'items' => $group['items'],
+            ];
+        }
     }
 
     $settingsActive = request()->routeIs('settings.index') || request()->routeIs('profile.edit') || request()->routeIs('security.edit') || request()->routeIs('appearance.edit');
@@ -99,7 +163,7 @@
         </main>
     </div>
 
-    {{-- Sidebar --}}
+    {{-- Sidebar (scroll position persisted in localStorage — survives wire:navigate + hard refresh) --}}
     <aside class="drawer-side z-40">
         <label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
 
@@ -124,33 +188,119 @@
                 </a>
             </div>
 
-            {{-- Menu --}}
-            <div class="flex-1 overflow-y-auto py-3">
+            {{-- Menu (scroll position persisted across navigate + refresh via localStorage) --}}
+            <div
+                class="flex-1 overflow-y-auto py-3"
+                x-data="{
+                    key: 'nav:scroll',
+                    init() {
+                        const saved = parseInt(localStorage.getItem(this.key) || '0', 10);
+                        if (saved > 0) {
+                            this.$nextTick(() => { this.$el.scrollTop = saved; });
+                        }
+                        let raf = null;
+                        this.$el.addEventListener('scroll', () => {
+                            if (raf) cancelAnimationFrame(raf);
+                            raf = requestAnimationFrame(() => {
+                                localStorage.setItem(this.key, String(this.$el.scrollTop));
+                            });
+                        }, { passive: true });
+                    },
+                }">
                 @foreach ($navSections as $section)
-                    @if (! empty($section['label']))
-                        <div class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.15em] text-secondary-content/50">
-                            {{ $section['label'] }}
-                        </div>
-                    @endif
+                    @php
+                        $hasActive = collect($section['items'] ?? [])->contains(fn ($i) => $i['active'] ?? false);
+                        $collapsible = $section['collapsible'] ?? false;
+                        $sectionKey = $section['key'] ?? ($section['label'] ?? 'nav');
+                    @endphp
 
-                    <ul class="px-2 space-y-0.5">
-                        @foreach ($section['items'] as $item)
-                            <li>
-                                <a
-                                    href="{{ $item['href'] }}"
-                                    wire:navigate
-                                    @class([
-                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                                        'bg-accent text-accent-content font-semibold shadow-sm' => $item['active'],
-                                        'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content' => ! $item['active'],
-                                    ])
-                                >
-                                    <x-mary-icon :name="$item['icon']" class="size-5 shrink-0" />
-                                    <span class="truncate">{{ $item['label'] }}</span>
-                                </a>
-                            </li>
-                        @endforeach
-                    </ul>
+                    @if ($collapsible && ! empty($section['label']))
+                        <div
+                            x-data="{
+                                key: 'nav:{{ $sectionKey }}',
+                                hasActive: {{ $hasActive ? 'true' : 'false' }},
+                                defaultOpen: {{ ($section['default_open'] ?? true) ? 'true' : 'false' }},
+                                open: false,
+                                init() {
+                                    const stored = localStorage.getItem(this.key);
+                                    if (stored === '1' || stored === '0') {
+                                        this.open = stored === '1';
+                                    } else {
+                                        this.open = this.hasActive || this.defaultOpen;
+                                    }
+                                    this.$watch('open', v => localStorage.setItem(this.key, v ? '1' : '0'));
+                                },
+                            }"
+                            class="mt-3"
+                        >
+                            <button
+                                type="button"
+                                @click="open = !open"
+                                class="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-secondary-content/60 hover:text-secondary-content transition-colors"
+                                :aria-expanded="open"
+                            >
+                                <span class="flex items-center gap-2">
+                                    {{ $section['label'] }}
+                                    @if ($hasActive)
+                                        <span class="size-1.5 rounded-full bg-accent"></span>
+                                    @endif
+                                </span>
+                                <x-mary-icon
+                                    name="o-chevron-down"
+                                    class="size-3.5 transition-transform"
+                                    ::class="open ? 'rotate-0' : '-rotate-90'"
+                                />
+                            </button>
+
+                            <ul
+                                x-show="open"
+                                x-transition.duration.150ms
+                                class="px-2 space-y-0.5 mt-0.5"
+                            >
+                                @foreach ($section['items'] as $item)
+                                    <li>
+                                        <a
+                                            href="{{ $item['href'] }}"
+                                            wire:navigate
+                                            @class([
+                                                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                                                'bg-accent text-accent-content font-semibold shadow-sm' => $item['active'],
+                                                'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content' => ! $item['active'],
+                                            ])
+                                        >
+                                            <x-mary-icon :name="$item['icon']" class="size-5 shrink-0" />
+                                            <span class="truncate">{{ $item['label'] }}</span>
+                                        </a>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @else
+                        @if (! empty($section['label']))
+                            <div class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.15em] text-secondary-content/50">
+                                {{ $section['label'] }}
+                            </div>
+                        @endif
+
+                        <ul class="px-2 space-y-0.5">
+                            @foreach ($section['items'] as $item)
+                                <li>
+                                    <a
+                                        href="{{ $item['href'] }}"
+                                        wire:navigate
+                                        @class([
+                                            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                                            'bg-accent text-accent-content font-semibold shadow-sm' => $item['active'],
+                                            'text-secondary-content/80 hover:bg-secondary-content/10 hover:text-secondary-content' => ! $item['active'],
+                                        ])
+                                    >
+                                        <x-mary-icon :name="$item['icon']" class="size-5 shrink-0" />
+                                        <span class="truncate">{{ $item['label'] }}</span>
+                                    </a>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
                 @endforeach
             </div>
 

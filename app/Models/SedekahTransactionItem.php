@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\SedekahTransactionItemFactory;
@@ -10,7 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'sedekah_transaction_id',
-    'waste_category_id',
+    'waste_item_id',
+    'item_code_snapshot',
+    'item_name_snapshot',
     'category_name_snapshot',
     'unit_snapshot',
     'quantity',
@@ -32,8 +36,8 @@ class SedekahTransactionItem extends Model
         return $this->belongsTo(SedekahTransaction::class, 'sedekah_transaction_id');
     }
 
-    public function category(): BelongsTo
+    public function item(): BelongsTo
     {
-        return $this->belongsTo(WasteCategory::class, 'waste_category_id');
+        return $this->belongsTo(WasteItem::class, 'waste_item_id');
     }
 }

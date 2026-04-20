@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -24,13 +26,13 @@ class SedekahManagementTest extends TestCase
     public function test_admin_can_create_sedekah_via_component(): void
     {
         $admin = User::factory()->admin()->create();
-        $category = WasteCategory::factory()->create();
+        $item = WasteItem::factory()->create();
 
         $this->actingAs($admin);
 
         Livewire::test('pages::admin.sedekah.create')
             ->set('donor_name', 'Ibu Anonim')
-            ->set('items.0.waste_category_id', $category->id)
+            ->set('items.0.waste_item_id', $item->id)
             ->set('items.0.quantity', '4')
             ->set('notes', 'donasi minggu ini')
             ->call('save')
@@ -44,7 +46,8 @@ class SedekahManagementTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('inventory_movements', [
-            'waste_category_id' => $category->id,
+            'waste_item_id' => $item->id,
+            'source' => 'sedekah',
             'reason' => 'sedekah',
             'quantity' => '4.000',
         ]);
@@ -56,6 +59,6 @@ class SedekahManagementTest extends TestCase
 
         Livewire::test('pages::admin.sedekah.create')
             ->call('save')
-            ->assertHasErrors(['items.0.waste_category_id', 'items.0.quantity']);
+            ->assertHasErrors(['items.0.waste_item_id', 'items.0.quantity']);
     }
 }

@@ -21,6 +21,7 @@ class ProductFactory extends Factory
             'description' => fake()->optional()->sentence(),
             'unit' => fake()->randomElement(['pcs', 'buah', 'kg', 'karung']),
             'price' => fake()->randomFloat(2, 5000, 500000),
+            'points_cost' => fake()->numberBetween(5, 200),
             'stock' => 0,
             'is_active' => true,
         ];

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\User;
@@ -7,9 +9,6 @@ use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
         User::factory()->admin()->create([
@@ -24,6 +23,8 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             WasteCategorySeeder::class,
+            WasteItemSeeder::class,
+            PointRuleSeeder::class,
             PartnerSeeder::class,
             ProductSeeder::class,
             ArticleSeeder::class,

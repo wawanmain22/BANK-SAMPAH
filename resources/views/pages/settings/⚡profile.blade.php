@@ -1,6 +1,5 @@
 <?php
 
-use App\Concerns\ProfileValidationRules;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -9,7 +8,7 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 
 new #[Title('Profile settings')] class extends Component {
-    use ProfileValidationRules, Toast;
+    use Toast;
 
     public string $name = '';
 
@@ -25,14 +24,14 @@ new #[Title('Profile settings')] class extends Component {
     {
         $user = Auth::user();
 
-        $validated = $this->validate($this->profileRules($user->id));
+        $validated = $this->validate([
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        // Email is readonly on this form — re-sync from DB so accidental client mutation is ignored.
+        $this->email = $user->email;
 
         $user->fill($validated);
-
-        if ($user->isDirty('email')) {
-            $user->email_verified_at = null;
-        }
-
         $user->save();
 
         $this->success(__('Profil diperbarui.'));
@@ -70,12 +69,30 @@ new #[Title('Profile settings')] class extends Component {
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-pages::settings.layout :heading="__('Profil')" :subheading="__('Perbarui nama dan alamat email Anda')">
+    <x-pages::settings.layout :heading="__('Profil')" :subheading="__('Perbarui nama Anda. Alamat email tidak bisa diubah sendiri — hubungi admin bila perlu.')">
         <form wire:submit="updateProfileInformation" class="my-6 w-full space-y-5">
-            <x-mary-input wire:model="name" label="{{ __('Nama') }}" icon="o-user" required autofocus autocomplete="name" :error="$errors->first('name')" />
+            <x-mary-input
+                wire:model="name"
+                label="{{ __('Nama') }}"
+                icon="o-user"
+                required
+                autofocus
+                autocomplete="name"
+                :error="$errors->first('name')"
+            />
 
             <div>
-                <x-mary-input wire:model="email" label="{{ __('Email') }}" icon="o-envelope" type="email" required autocomplete="email" :error="$errors->first('email')" />
+                <x-mary-input
+                    :value="$email"
+                    label="{{ __('Email') }}"
+                    icon="o-envelope"
+                    type="email"
+                    readonly
+                    disabled
+                    autocomplete="email"
+                    aria-readonly="true"
+                    hint="{{ __('Email hanya bisa diubah oleh admin.') }}"
+                />
 
                 @if ($this->hasUnverifiedEmail)
                     <p class="mt-3 text-sm text-base-content/70">
@@ -87,7 +104,13 @@ new #[Title('Profile settings')] class extends Component {
                 @endif
             </div>
 
-            <x-mary-button type="submit" label="{{ __('Simpan') }}" class="btn-primary" spinner="updateProfileInformation" data-test="update-profile-button" />
+            <x-mary-button
+                type="submit"
+                label="{{ __('Simpan') }}"
+                class="btn-primary"
+                spinner="updateProfileInformation"
+                data-test="update-profile-button"
+            />
         </form>
 
         @if ($this->showDeleteUser)

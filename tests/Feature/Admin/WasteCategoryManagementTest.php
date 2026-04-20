@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
@@ -33,7 +35,7 @@ class WasteCategoryManagementTest extends TestCase
         Livewire::test('pages::admin.waste-category.index')
             ->call('startCreating')
             ->set('name', 'Plastik Botol')
-            ->set('unit', 'kg')
+            ->set('code_prefix', 'PLB')
             ->set('description', 'Botol air mineral PET')
             ->set('is_active', true)
             ->call('save')
@@ -41,24 +43,39 @@ class WasteCategoryManagementTest extends TestCase
 
         $this->assertDatabaseHas('waste_categories', [
             'name' => 'Plastik Botol',
-            'unit' => 'kg',
+            'code_prefix' => 'PLB',
             'is_active' => true,
         ]);
     }
 
     public function test_category_name_must_be_unique(): void
     {
-        WasteCategory::factory()->create(['name' => 'Plastik']);
+        WasteCategory::factory()->create(['name' => 'Plastik', 'code_prefix' => 'PLX']);
 
         $this->actingAs($this->admin());
 
         Livewire::test('pages::admin.waste-category.index')
             ->call('startCreating')
             ->set('name', 'Plastik')
-            ->set('unit', 'kg')
+            ->set('code_prefix', 'PLZ')
             ->set('is_active', true)
             ->call('save')
             ->assertHasErrors(['name']);
+    }
+
+    public function test_code_prefix_must_be_unique(): void
+    {
+        WasteCategory::factory()->create(['code_prefix' => 'KT']);
+
+        $this->actingAs($this->admin());
+
+        Livewire::test('pages::admin.waste-category.index')
+            ->call('startCreating')
+            ->set('name', 'Kertas Daur Ulang')
+            ->set('code_prefix', 'KT')
+            ->set('is_active', true)
+            ->call('save')
+            ->assertHasErrors(['code_prefix']);
     }
 
     public function test_admin_can_update_category(): void
@@ -76,7 +93,7 @@ class WasteCategoryManagementTest extends TestCase
         $this->assertSame('Kertas HVS', $category->refresh()->name);
     }
 
-    public function test_admin_can_delete_category(): void
+    public function test_admin_can_delete_empty_category(): void
     {
         $category = WasteCategory::factory()->create();
 

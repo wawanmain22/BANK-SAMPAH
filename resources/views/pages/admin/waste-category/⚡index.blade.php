@@ -18,9 +18,9 @@ new #[Title('Kategori Sampah')] class extends Component {
 
     public string $name = '';
 
-    public string $description = '';
+    public string $code_prefix = '';
 
-    public string $unit = 'kg';
+    public string $description = '';
 
     public bool $is_active = true;
 
@@ -39,9 +39,9 @@ new #[Title('Kategori Sampah')] class extends Component {
     public function headers(): array
     {
         return [
+            ['key' => 'code_prefix', 'label' => __('Kode'), 'class' => 'w-20'],
             ['key' => 'name', 'label' => __('Nama')],
-            ['key' => 'unit', 'label' => __('Satuan'), 'class' => 'hidden md:table-cell'],
-            ['key' => 'prices_count', 'label' => __('Riwayat'), 'class' => 'hidden lg:table-cell'],
+            ['key' => 'items_count', 'label' => __('Jml Barang'), 'class' => 'hidden md:table-cell'],
             ['key' => 'status_label', 'label' => __('Status'), 'sortable' => false],
         ];
     }
@@ -50,9 +50,12 @@ new #[Title('Kategori Sampah')] class extends Component {
     public function categories()
     {
         return WasteCategory::query()
-            ->when($this->search !== '', fn ($q) => $q->where('name', 'like', '%'.$this->search.'%'))
-            ->withCount('prices')
-            ->orderBy('name')
+            ->when($this->search !== '', fn ($q) => $q->where(function ($inner) {
+                $inner->where('name', 'like', '%'.$this->search.'%')
+                    ->orWhere('code_prefix', 'like', '%'.$this->search.'%');
+            }))
+            ->withCount('items')
+            ->orderBy('code_prefix')
             ->paginate(15);
     }
 
@@ -73,8 +76,8 @@ new #[Title('Kategori Sampah')] class extends Component {
 
         $this->editingId = $category->id;
         $this->name = $category->name;
+        $this->code_prefix = $category->code_prefix;
         $this->description = (string) ($category->description ?? '');
-        $this->unit = $category->unit;
         $this->is_active = (bool) $category->is_active;
 
         $this->formModal = true;
@@ -83,6 +86,7 @@ new #[Title('Kategori Sampah')] class extends Component {
     public function save(): void
     {
         $validated = $this->validate();
+        $validated['code_prefix'] = strtoupper($validated['code_prefix']);
 
         if ($this->editingId) {
             $category = WasteCategory::findOrFail($this->editingId);
@@ -112,7 +116,17 @@ new #[Title('Kategori Sampah')] class extends Component {
             return;
         }
 
-        WasteCategory::findOrFail($this->deletingId)->delete();
+        $category = WasteCategory::withCount('items')->findOrFail($this->deletingId);
+
+        if ($category->items_count > 0) {
+            $this->error(__('Tidak bisa dihapus: masih ada :n barang di kategori ini.', ['n' => $category->items_count]));
+            $this->deleteModal = false;
+            $this->deletingId = null;
+
+            return;
+        }
+
+        $category->delete();
         $this->deletingId = null;
         $this->deleteModal = false;
 
@@ -121,9 +135,8 @@ new #[Title('Kategori Sampah')] class extends Component {
 
     private function resetForm(): void
     {
-        $this->reset(['editingId', 'name', 'description', 'unit', 'is_active']);
+        $this->reset(['editingId', 'name', 'code_prefix', 'description', 'is_active']);
         $this->is_active = true;
-        $this->unit = 'kg';
         $this->resetErrorBag();
     }
 }; ?>
@@ -131,7 +144,7 @@ new #[Title('Kategori Sampah')] class extends Component {
 <section class="w-full">
     <x-mary-header
         title="{{ __('Kategori Sampah') }}"
-        subtitle="{{ __('Kelola kategori sampah yang diterima Bank Sampah.') }}"
+        subtitle="{{ __('Grup barang sampah (Kertas, Logam, Botol, Plastik, dll). Detail harga per barang ada di menu Barang Sampah.') }}"
         separator
         progress-indicator
     >
@@ -139,7 +152,7 @@ new #[Title('Kategori Sampah')] class extends Component {
             <x-mary-input
                 wire:model.live.debounce.300ms="search"
                 icon="o-magnifying-glass"
-                placeholder="{{ __('Cari kategori...') }}"
+                placeholder="{{ __('Cari kategori / kode...') }}"
                 clearable
             />
         </x-slot:middle>
@@ -160,6 +173,10 @@ new #[Title('Kategori Sampah')] class extends Component {
         with-pagination
         striped
     >
+        @scope('cell_code_prefix', $row)
+            <x-mary-badge value="{{ $row->code_prefix }}" class="badge-neutral badge-soft font-mono" />
+        @endscope
+
         @scope('cell_name', $row)
             <div>
                 <div class="font-medium">{{ $row->name }}</div>
@@ -169,8 +186,8 @@ new #[Title('Kategori Sampah')] class extends Component {
             </div>
         @endscope
 
-        @scope('cell_prices_count', $row)
-            {{ $row->prices_count }} {{ __('harga') }}
+        @scope('cell_items_count', $row)
+            {{ $row->items_count }} {{ __('barang') }}
         @endscope
 
         @scope('cell_status_label', $row)
@@ -202,14 +219,26 @@ new #[Title('Kategori Sampah')] class extends Component {
     <x-mary-modal
         wire:model="formModal"
         title="{{ $editingId ? __('Edit Kategori') : __('Tambah Kategori') }}"
-        subtitle="{{ __('Pastikan nama kategori unik dan jelas.') }}"
+        subtitle="{{ __('Kode prefix dipakai untuk generate kode barang (contoh KT = Kertas → KT1, KT2 ...).') }}"
         separator
         box-class="max-w-lg"
     >
         <x-mary-form wire:submit="save" no-separator>
-            <x-mary-input wire:model="name" label="{{ __('Nama kategori') }}" icon="o-tag" required />
+            <div class="grid gap-3 md:grid-cols-3">
+                <x-mary-input
+                    wire:model="code_prefix"
+                    label="{{ __('Kode') }}"
+                    icon="o-hashtag"
+                    placeholder="KT"
+                    maxlength="8"
+                    class="uppercase"
+                    required
+                />
+                <div class="md:col-span-2">
+                    <x-mary-input wire:model="name" label="{{ __('Nama kategori') }}" icon="o-tag" required />
+                </div>
+            </div>
             <x-mary-textarea wire:model="description" label="{{ __('Deskripsi') }}" rows="2" />
-            <x-mary-input wire:model="unit" label="{{ __('Satuan') }}" icon="o-scale" placeholder="kg" required />
             <x-mary-toggle wire:model="is_active" label="{{ __('Aktif') }}" right />
 
             <x-slot:actions>
@@ -227,7 +256,7 @@ new #[Title('Kategori Sampah')] class extends Component {
 
     <x-mary-modal wire:model="deleteModal" title="{{ __('Hapus Kategori') }}" box-class="max-w-md">
         <p class="text-sm text-base-content/70">
-            {{ __('Semua riwayat harga terkait akan ikut terhapus. Transaksi lama tetap menyimpan harga saat itu.') }}
+            {{ __('Kategori hanya bisa dihapus jika tidak punya barang terdaftar. Hapus barangnya dulu di menu Barang Sampah.') }}
         </p>
 
         <x-slot:actions>

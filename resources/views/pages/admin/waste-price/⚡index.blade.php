@@ -2,17 +2,24 @@
 
 use App\Concerns\WastePriceValidationRules;
 use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use App\Models\WastePrice;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
 new #[Title('Harga Sampah')] class extends Component {
-    use Toast, WastePriceValidationRules;
+    use Toast, WastePriceValidationRules, WithPagination;
 
-    public ?int $waste_category_id = null;
+    public string $search = '';
+
+    public ?int $category_filter = null;
+
+    public ?int $waste_item_id = null;
 
     public string $price_per_unit = '';
 
@@ -20,7 +27,7 @@ new #[Title('Harga Sampah')] class extends Component {
 
     public string $notes = '';
 
-    public ?int $historyCategoryId = null;
+    public ?int $historyItemId = null;
 
     public bool $formModal = false;
 
@@ -31,36 +38,63 @@ new #[Title('Harga Sampah')] class extends Component {
         $this->effective_from = now()->toDateString();
     }
 
+    public function updatingSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingCategoryFilter(): void
+    {
+        $this->resetPage();
+    }
+
     #[Computed]
     public function headers(): array
     {
         return [
-            ['key' => 'name', 'label' => __('Kategori')],
-            ['key' => 'unit', 'label' => __('Satuan'), 'class' => 'hidden md:table-cell'],
+            ['key' => 'code', 'label' => __('Kode'), 'class' => 'w-20'],
+            ['key' => 'name', 'label' => __('Barang')],
+            ['key' => 'category_label', 'label' => __('Kategori'), 'class' => 'hidden md:table-cell'],
             ['key' => 'current_price_label', 'label' => __('Harga Aktif'), 'sortable' => false],
             ['key' => 'effective_from_label', 'label' => __('Berlaku Sejak'), 'class' => 'hidden lg:table-cell', 'sortable' => false],
         ];
     }
 
     #[Computed]
-    public function categories()
+    public function items()
     {
-        return WasteCategory::query()
+        return WasteItem::query()
             ->active()
-            ->with('currentPrice')
-            ->orderBy('name')
-            ->get();
+            ->with(['category:id,name,code_prefix', 'currentPrice'])
+            ->when($this->search !== '', fn ($q) => $q->where(function ($inner) {
+                $inner->where('name', 'like', '%'.$this->search.'%')
+                    ->orWhere('code', 'like', '%'.$this->search.'%');
+            }))
+            ->when($this->category_filter, fn ($q) => $q->where('waste_category_id', $this->category_filter))
+            ->orderBy('code')
+            ->paginate(20);
     }
 
     #[Computed]
-    public function historyCategory(): ?WasteCategory
+    public function categoryOptions(): array
     {
-        if (! $this->historyCategoryId) {
+        return WasteCategory::query()
+            ->active()
+            ->orderBy('code_prefix')
+            ->get(['id', 'name', 'code_prefix'])
+            ->map(fn ($c) => ['id' => $c->id, 'name' => "{$c->code_prefix} — {$c->name}"])
+            ->toArray();
+    }
+
+    #[Computed]
+    public function historyItem(): ?WasteItem
+    {
+        if (! $this->historyItemId) {
             return null;
         }
 
-        return WasteCategory::with(['prices' => fn ($q) => $q->orderByDesc('effective_from')->orderByDesc('id')])
-            ->find($this->historyCategoryId);
+        return WasteItem::with(['prices' => fn ($q) => $q->orderByDesc('effective_from')->orderByDesc('id')])
+            ->find($this->historyItemId);
     }
 
     public function rules(): array
@@ -68,10 +102,10 @@ new #[Title('Harga Sampah')] class extends Component {
         return $this->wastePriceRules();
     }
 
-    public function startSettingPrice(int $categoryId): void
+    public function startSettingPrice(int $itemId): void
     {
         $this->resetForm();
-        $this->waste_category_id = $categoryId;
+        $this->waste_item_id = $itemId;
         $this->formModal = true;
     }
 
@@ -79,26 +113,32 @@ new #[Title('Harga Sampah')] class extends Component {
     {
         $validated = $this->validate();
 
-        WastePrice::create([
-            ...$validated,
-            'created_by' => Auth::id(),
-        ]);
+        DB::transaction(function () use ($validated) {
+            WastePrice::create([
+                ...$validated,
+                'created_by' => Auth::id(),
+            ]);
+
+            // Sync the denormalized current price on the item for quick lookups.
+            WasteItem::whereKey($validated['waste_item_id'])
+                ->update(['price_per_unit' => (float) $validated['price_per_unit']]);
+        });
 
         $this->formModal = false;
         $this->success(__('Harga baru tersimpan.'));
         $this->resetForm();
-        unset($this->categories);
+        unset($this->items);
     }
 
-    public function showHistory(int $categoryId): void
+    public function showHistory(int $itemId): void
     {
-        $this->historyCategoryId = $categoryId;
+        $this->historyItemId = $itemId;
         $this->historyModal = true;
     }
 
     private function resetForm(): void
     {
-        $this->reset(['waste_category_id', 'price_per_unit', 'notes']);
+        $this->reset(['waste_item_id', 'price_per_unit', 'notes']);
         $this->effective_from = now()->toDateString();
         $this->resetErrorBag();
     }
@@ -107,21 +147,56 @@ new #[Title('Harga Sampah')] class extends Component {
 <section class="w-full">
     <x-mary-header
         title="{{ __('Harga Sampah') }}"
-        subtitle="{{ __('Harga per satuan untuk tiap kategori. Harga baru berlaku sesuai tanggal efektif dan tidak mengubah transaksi yang sudah ada.') }}"
+        subtitle="{{ __('Set harga baru per barang. Harga lama tetap tersimpan sebagai riwayat dan transaksi lama tidak ikut berubah.') }}"
         separator
         progress-indicator
-    />
+    >
+        <x-slot:middle class="!justify-end">
+            <div class="flex flex-col gap-2 md:flex-row">
+                <x-mary-input
+                    wire:model.live.debounce.300ms="search"
+                    icon="o-magnifying-glass"
+                    placeholder="{{ __('Cari barang / kode...') }}"
+                    clearable
+                    class="md:w-56"
+                />
+                <x-mary-select
+                    wire:model.live="category_filter"
+                    :options="$this->categoryOptions"
+                    option-label="name"
+                    option-value="id"
+                    placeholder="{{ __('Semua kategori') }}"
+                    icon="o-tag"
+                    class="md:w-56"
+                />
+            </div>
+        </x-slot:middle>
+    </x-mary-header>
 
     <x-mary-table
         :headers="$this->headers"
-        :rows="$this->categories"
+        :rows="$this->items"
+        with-pagination
         striped
     >
+        @scope('cell_code', $row)
+            <span class="font-mono text-sm">{{ $row->code }}</span>
+        @endscope
+
+        @scope('cell_name', $row)
+            <div class="font-medium">{{ $row->name }}</div>
+        @endscope
+
+        @scope('cell_category_label', $row)
+            <x-mary-badge value="{{ $row->category?->name }}" class="badge-neutral badge-soft" />
+        @endscope
+
         @scope('cell_current_price_label', $row)
             @if ($row->currentPrice)
                 <span class="font-medium">
                     Rp {{ number_format((float) $row->currentPrice->price_per_unit, 2, ',', '.') }}
                 </span>
+                <span class="text-xs text-base-content/60">/{{ $row->unit }}</span>
             @else
                 <x-mary-badge value="{{ __('Belum ada') }}" class="badge-warning badge-soft" />
             @endif
@@ -153,16 +228,16 @@ new #[Title('Harga Sampah')] class extends Component {
         @endscope
     </x-mary-table>
 
-    @if ($this->categories->isEmpty())
+    @if ($this->items->isEmpty())
         <div class="rounded-xl border border-base-300 bg-base-100 p-8 text-center text-base-content/60">
-            {{ __('Belum ada kategori aktif. Tambahkan dulu di menu Kategori Sampah.') }}
+            {{ __('Belum ada barang aktif. Tambahkan dulu di menu Barang Sampah.') }}
         </div>
     @endif
 
     <x-mary-modal
         wire:model="formModal"
         title="{{ __('Set Harga Baru') }}"
-        subtitle="{{ __('Harga akan berlaku mulai tanggal efektif. Harga lama tetap tersimpan sebagai riwayat.') }}"
+        subtitle="{{ __('Harga akan berlaku mulai tanggal efektif. Harga lama tersimpan di riwayat.') }}"
         separator
         box-class="max-w-lg"
     >
@@ -201,11 +276,11 @@ new #[Title('Harga Sampah')] class extends Component {
     <x-mary-modal
         wire:model="historyModal"
         title="{{ __('Riwayat Harga') }}"
-        subtitle="{{ $this->historyCategory?->name }}"
+        subtitle="{{ $this->historyItem?->code }} — {{ $this->historyItem?->name }}"
         separator
         box-class="max-w-xl"
     >
-        @if ($this->historyCategory)
+        @if ($this->historyItem)
             <div class="max-h-[60vh] overflow-y-auto">
                 <table class="table table-zebra">
                     <thead>
@@ -216,7 +291,7 @@ new #[Title('Harga Sampah')] class extends Component {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->historyCategory->prices as $price)
+                        @forelse ($this->historyItem->prices as $price)
                             <tr wire:key="price-{{ $price->id }}">
                                 <td class="whitespace-nowrap">{{ $price->effective_from->format('d M Y') }}</td>
                                 <td class="whitespace-nowrap">Rp {{ number_format((float) $price->price_per_unit, 2, ',', '.') }}</td>

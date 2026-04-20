@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\ProcessingInput;
@@ -7,23 +9,24 @@ use App\Models\ProcessingOutput;
 use App\Models\ProcessingTransaction;
 use App\Models\Product;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Records a waste-processing transaction: inputs (waste taken from inventory)
- * transformed into outputs (products produced). Inputs decrement inventory;
- * outputs increment product stock.
+ * Records a waste-processing transaction: inputs drawn from the `sedekah`
+ * inventory pool transformed into product outputs. Sampah nabung cannot be
+ * processed — it is reserved for sale to mitra.
  */
 class ProcessingTransactionService
 {
     public function __construct(
         private InventoryService $inventoryService,
+        private ProductInventoryService $productInventoryService,
     ) {}
 
     /**
-     * @param  array<int, array{waste_category_id: int, quantity: float|string}>  $inputs
+     * @param  array<int, array{waste_item_id: int, quantity: float|string}>  $inputs
      * @param  array<int, array{product_id: int, quantity: float|string}>  $outputs
      */
     public function create(
@@ -42,14 +45,14 @@ class ProcessingTransactionService
             $totalInputWeight = 0.0;
 
             foreach ($inputs as $input) {
-                $category = WasteCategory::findOrFail($input['waste_category_id']);
+                $wasteItem = WasteItem::with('category')->findOrFail($input['waste_item_id']);
                 $quantity = (float) $input['quantity'];
 
                 if ($quantity <= 0) {
                     throw new InvalidArgumentException('Kuantitas input harus lebih dari 0.');
                 }
 
-                $preparedInputs[] = ['category' => $category, 'quantity' => $quantity];
+                $preparedInputs[] = ['item' => $wasteItem, 'quantity' => $quantity];
                 $totalInputWeight += $quantity;
             }
 
@@ -72,26 +75,31 @@ class ProcessingTransactionService
             ]);
 
             foreach ($preparedInputs as $row) {
+                $wasteItem = $row['item'];
+
                 ProcessingInput::create([
                     'processing_transaction_id' => $transaction->id,
-                    'waste_category_id' => $row['category']->id,
-                    'category_name_snapshot' => $row['category']->name,
-                    'unit_snapshot' => $row['category']->unit,
+                    'waste_item_id' => $wasteItem->id,
+                    'item_code_snapshot' => $wasteItem->code,
+                    'item_name_snapshot' => $wasteItem->name,
+                    'category_name_snapshot' => $wasteItem->category->name,
+                    'unit_snapshot' => $wasteItem->unit,
                     'quantity' => $row['quantity'],
                 ]);
 
-                // Throws if stock insufficient - rolls back all
+                // Throws if sedekah stock insufficient — rolls back entire transaction.
                 $this->inventoryService->remove(
-                    category: $row['category'],
+                    item: $wasteItem,
+                    source: InventoryService::SOURCE_SEDEKAH,
                     quantity: $row['quantity'],
                     reason: 'process',
-                    source: $transaction,
+                    sourceRef: $transaction,
                     createdBy: $createdBy,
                 );
             }
 
             foreach ($preparedOutputs as $row) {
-                ProcessingOutput::create([
+                $output = ProcessingOutput::create([
                     'processing_transaction_id' => $transaction->id,
                     'product_id' => $row['product']->id,
                     'product_name_snapshot' => $row['product']->name,
@@ -99,7 +107,13 @@ class ProcessingTransactionService
                     'quantity' => $row['quantity'],
                 ]);
 
-                $row['product']->increment('stock', $row['quantity']);
+                $this->productInventoryService->add(
+                    product: $row['product'],
+                    quantity: $row['quantity'],
+                    reason: 'process',
+                    sourceRef: $output,
+                    createdBy: $createdBy,
+                );
             }
 
             return $transaction->load('inputs', 'outputs');

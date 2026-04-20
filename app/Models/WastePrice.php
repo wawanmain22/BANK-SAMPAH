@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\WastePriceFactory;
@@ -8,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['waste_category_id', 'price_per_unit', 'effective_from', 'notes', 'created_by'])]
+#[Fillable(['waste_item_id', 'price_per_unit', 'effective_from', 'notes', 'created_by'])]
 class WastePrice extends Model
 {
     /** @use HasFactory<WastePriceFactory> */
@@ -22,9 +24,9 @@ class WastePrice extends Model
         ];
     }
 
-    public function category(): BelongsTo
+    public function item(): BelongsTo
     {
-        return $this->belongsTo(WasteCategory::class, 'waste_category_id');
+        return $this->belongsTo(WasteItem::class, 'waste_item_id');
     }
 
     public function createdBy(): BelongsTo

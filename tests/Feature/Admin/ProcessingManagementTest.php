@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature\Admin;
 
 use App\Models\Product;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -22,14 +24,20 @@ class ProcessingManagementTest extends TestCase
     public function test_admin_can_create_processing_via_component(): void
     {
         $admin = User::factory()->admin()->create();
-        $category = WasteCategory::factory()->create();
+        $item = WasteItem::factory()->create();
         $product = Product::factory()->create(['stock' => 0]);
-        app(InventoryService::class)->add($category, 50, 'adjustment');
+
+        app(InventoryService::class)->add(
+            item: $item,
+            source: InventoryService::SOURCE_SEDEKAH,
+            quantity: 50,
+            reason: 'adjustment',
+        );
 
         $this->actingAs($admin);
 
         Livewire::test('pages::admin.processing.create')
-            ->set('inputs.0.waste_category_id', $category->id)
+            ->set('inputs.0.waste_item_id', $item->id)
             ->set('inputs.0.quantity', '8')
             ->call('addOutput')
             ->set('outputs.0.product_id', $product->id)
@@ -53,6 +61,6 @@ class ProcessingManagementTest extends TestCase
 
         Livewire::test('pages::admin.processing.create')
             ->call('save')
-            ->assertHasErrors(['inputs.0.waste_category_id', 'inputs.0.quantity']);
+            ->assertHasErrors(['inputs.0.waste_item_id', 'inputs.0.quantity']);
     }
 }

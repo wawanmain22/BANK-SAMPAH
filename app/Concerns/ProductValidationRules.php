@@ -25,6 +25,7 @@ trait ProductValidationRules
             'image' => ['nullable', 'string', 'max:500'],
             'unit' => ['required', 'string', 'max:16'],
             'price' => ['required', 'numeric', 'min:0'],
+            'points_cost' => ['required', 'integer', 'min:0'],
             'is_active' => ['required', 'boolean'],
         ];
     }

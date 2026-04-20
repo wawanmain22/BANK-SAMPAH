@@ -70,11 +70,13 @@ new #[Title('Tukar Poin')] class extends Component {
         return Product::active()
             ->where('stock', '>', 0)
             ->orderBy('name')
-            ->get(['id', 'name', 'unit', 'stock'])
+            ->get(['id', 'name', 'unit', 'stock', 'points_cost'])
             ->map(fn ($p) => [
                 'id' => $p->id,
-                'name' => $p->name.' — '.__('stok').': '
+                'name' => $p->name.' — '.(int) $p->points_cost.' poin/'.$p->unit
+                    .' · '.__('stok').': '
                     .rtrim(rtrim(number_format((float) $p->stock, 3, ',', '.'), '0'), ',').' '.$p->unit,
+                'points_cost' => (int) $p->points_cost,
             ])
             ->toArray();
     }
@@ -83,6 +85,32 @@ new #[Title('Tukar Poin')] class extends Component {
     public function selectedUser(): ?User
     {
         return $this->user_id ? User::with('balance')->find($this->user_id) : null;
+    }
+
+    public function updatedProductId(): void
+    {
+        $this->autofillPoints();
+    }
+
+    public function updatedQuantity(): void
+    {
+        $this->autofillPoints();
+    }
+
+    private function autofillPoints(): void
+    {
+        if (! $this->product_id) {
+            return;
+        }
+
+        $opt = collect($this->productOptions)->firstWhere('id', (int) $this->product_id);
+        $qty = (float) ($this->quantity !== '' ? $this->quantity : 0);
+
+        if (! $opt || $qty <= 0) {
+            return;
+        }
+
+        $this->points_used = (string) (int) ceil(((int) $opt['points_cost']) * $qty);
     }
 
     public function startCreating(): void
@@ -205,7 +233,7 @@ new #[Title('Tukar Poin')] class extends Component {
             @endif
 
             <x-mary-select
-                wire:model="product_id"
+                wire:model.live="product_id"
                 label="{{ __('Produk') }}"
                 :options="$this->productOptions"
                 option-label="name"
@@ -216,8 +244,22 @@ new #[Title('Tukar Poin')] class extends Component {
             />
 
             <div class="grid gap-3 md:grid-cols-2">
-                <x-mary-input wire:model="quantity" label="{{ __('Jumlah') }}" type="number" step="0.001" min="0" required />
-                <x-mary-input wire:model="points_used" label="{{ __('Poin yang ditukar') }}" type="number" min="1" required />
+                <x-mary-input
+                    wire:model.live.debounce.300ms="quantity"
+                    label="{{ __('Jumlah') }}"
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    required
+                />
+                <x-mary-input
+                    wire:model="points_used"
+                    label="{{ __('Poin yang ditukar') }}"
+                    type="number"
+                    min="1"
+                    hint="{{ __('Auto-isi dari master produk. Bisa di-edit jika perlu.') }}"
+                    required
+                />
             </div>
 
             <x-mary-textarea wire:model="notes" label="{{ __('Catatan') }}" rows="2" />

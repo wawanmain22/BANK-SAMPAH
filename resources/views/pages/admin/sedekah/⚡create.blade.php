@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use App\Services\SedekahTransactionService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -18,12 +18,12 @@ new #[Title('Sedekah Baru')] class extends Component {
 
     public string $notes = '';
 
-    /** @var array<int, array{waste_category_id: ?int, quantity: string}> */
+    /** @var array<int, array{waste_item_id: ?int, quantity: string}> */
     public array $items = [];
 
     public function mount(): void
     {
-        $this->items = [['waste_category_id' => null, 'quantity' => '']];
+        $this->items = [['waste_item_id' => null, 'quantity' => '']];
     }
 
     #[Computed]
@@ -37,12 +37,16 @@ new #[Title('Sedekah Baru')] class extends Component {
     }
 
     #[Computed]
-    public function categoryOptions(): array
+    public function itemOptions(): array
     {
-        return WasteCategory::active()
-            ->orderBy('name')
-            ->get(['id', 'name', 'unit'])
-            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'unit' => $c->unit])
+        return WasteItem::active()
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'unit'])
+            ->map(fn ($wi) => [
+                'id' => $wi->id,
+                'name' => "{$wi->code} — {$wi->name}",
+                'unit' => $wi->unit,
+            ])
             ->toArray();
     }
 
@@ -54,7 +58,7 @@ new #[Title('Sedekah Baru')] class extends Component {
 
     public function addItem(): void
     {
-        $this->items[] = ['waste_category_id' => null, 'quantity' => ''];
+        $this->items[] = ['waste_item_id' => null, 'quantity' => ''];
     }
 
     public function removeItem(int $index): void
@@ -74,7 +78,7 @@ new #[Title('Sedekah Baru')] class extends Component {
             'donor_name' => ['nullable', 'string', 'max:128'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.waste_category_id' => ['required', 'integer', 'exists:waste_categories,id'],
+            'items.*.waste_item_id' => ['required', 'integer', 'exists:waste_items,id'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
         ];
     }
@@ -88,7 +92,7 @@ new #[Title('Sedekah Baru')] class extends Component {
         try {
             $transaction = $service->create(
                 items: array_map(fn ($item) => [
-                    'waste_category_id' => (int) $item['waste_category_id'],
+                    'waste_item_id' => (int) $item['waste_item_id'],
                     'quantity' => (float) $item['quantity'],
                 ], $this->items),
                 donor: $donor,
@@ -110,7 +114,7 @@ new #[Title('Sedekah Baru')] class extends Component {
 <section class="w-full">
     <x-mary-header
         title="{{ __('Sedekah Baru') }}"
-        subtitle="{{ __('Pilih donor (opsional jika anonim) dan input jenis sampah yang disumbangkan.') }}"
+        subtitle="{{ __('Pilih donor (opsional jika anonim) dan input barang sampah sedekah. Stok masuk ke pool sedekah.') }}"
         separator
     >
         <x-slot:actions>
@@ -150,31 +154,29 @@ new #[Title('Sedekah Baru')] class extends Component {
             </div>
 
             @foreach ($items as $index => $item)
-                @php
-                    $categoryOpt = collect($this->categoryOptions)->firstWhere('id', $item['waste_category_id']);
-                @endphp
+                @php $itemOpt = collect($this->itemOptions)->firstWhere('id', $item['waste_item_id']); @endphp
                 <div wire:key="sitem-{{ $index }}" class="card bg-base-100 border border-base-300">
                     <div class="card-body p-4 gap-3">
                         <div class="grid gap-3 md:grid-cols-12">
                             <div class="md:col-span-7">
                                 <x-mary-select
-                                    wire:model.live="items.{{ $index }}.waste_category_id"
-                                    label="{{ __('Kategori') }}"
-                                    :options="$this->categoryOptions"
+                                    wire:model.live="items.{{ $index }}.waste_item_id"
+                                    label="{{ __('Barang') }}"
+                                    :options="$this->itemOptions"
                                     option-label="name"
                                     option-value="id"
-                                    placeholder="{{ __('Pilih kategori') }}"
-                                    icon="o-tag"
+                                    placeholder="{{ __('Pilih barang') }}"
+                                    icon="o-hashtag"
                                 />
                             </div>
                             <div class="md:col-span-3">
                                 <x-mary-input
                                     wire:model.live="items.{{ $index }}.quantity"
-                                    label="{{ __('Berat') }}"
+                                    label="{{ __('Jumlah') }}"
                                     type="number"
                                     step="0.001"
                                     min="0"
-                                    :suffix="$categoryOpt['unit'] ?? 'kg'"
+                                    :suffix="$itemOpt['unit'] ?? 'kg'"
                                 />
                             </div>
                             <div class="md:col-span-2 flex md:items-end">
@@ -188,7 +190,7 @@ new #[Title('Sedekah Baru')] class extends Component {
                             </div>
                         </div>
 
-                        @error("items.{$index}.waste_category_id")
+                        @error("items.{$index}.waste_item_id")
                             <div class="text-sm text-error">{{ $message }}</div>
                         @enderror
                         @error("items.{$index}.quantity")
@@ -203,7 +205,7 @@ new #[Title('Sedekah Baru')] class extends Component {
 
         <div class="rounded-xl border border-base-300 bg-base-100 p-4 flex items-center justify-between">
             <div class="text-sm text-base-content/70">{{ __('Total berat') }}</div>
-            <div class="text-lg font-bold">{{ number_format($this->totalWeight, 3, ',', '.') }} kg</div>
+            <div class="text-lg font-bold">{{ number_format($this->totalWeight, 3, ',', '.') }}</div>
         </div>
 
         <div class="flex justify-end gap-2">

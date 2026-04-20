@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\WasteCategory;
@@ -13,13 +15,13 @@ class WasteCategoryFactory extends Factory
 {
     public function definition(): array
     {
-        $name = fake()->unique()->words(2, true);
+        $name = ucfirst(fake()->unique()->words(2, true));
 
         return [
-            'name' => ucfirst($name),
+            'name' => $name,
             'slug' => Str::slug($name).'-'.Str::random(4),
+            'code_prefix' => strtoupper(fake()->unique()->lexify('??')),
             'description' => fake()->optional()->sentence(),
-            'unit' => 'kg',
             'is_active' => true,
         ];
     }

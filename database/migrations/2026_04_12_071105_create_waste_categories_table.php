@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -12,8 +14,8 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('slug')->unique();
+            $table->string('code_prefix', 8)->unique();
             $table->text('description')->nullable();
-            $table->string('unit', 16)->default('kg');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 

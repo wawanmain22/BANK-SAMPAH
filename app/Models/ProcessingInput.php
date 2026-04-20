@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -8,7 +10,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'processing_transaction_id',
-    'waste_category_id',
+    'waste_item_id',
+    'item_code_snapshot',
+    'item_name_snapshot',
     'category_name_snapshot',
     'unit_snapshot',
     'quantity',
@@ -27,8 +31,8 @@ class ProcessingInput extends Model
         return $this->belongsTo(ProcessingTransaction::class, 'processing_transaction_id');
     }
 
-    public function category(): BelongsTo
+    public function item(): BelongsTo
     {
-        return $this->belongsTo(WasteCategory::class, 'waste_category_id');
+        return $this->belongsTo(WasteItem::class, 'waste_item_id');
     }
 }

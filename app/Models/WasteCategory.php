@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\WasteCategoryFactory;
@@ -8,9 +10,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['name', 'slug', 'description', 'unit', 'is_active'])]
+#[Fillable(['name', 'slug', 'code_prefix', 'description', 'is_active'])]
 class WasteCategory extends Model
 {
     /** @use HasFactory<WasteCategoryFactory> */
@@ -23,28 +24,9 @@ class WasteCategory extends Model
         ];
     }
 
-    public function prices(): HasMany
+    public function items(): HasMany
     {
-        return $this->hasMany(WastePrice::class);
-    }
-
-    public function inventory(): HasOne
-    {
-        return $this->hasOne(Inventory::class);
-    }
-
-    public function inventoryMovements(): HasMany
-    {
-        return $this->hasMany(InventoryMovement::class);
-    }
-
-    public function currentPrice(): HasOne
-    {
-        return $this->hasOne(WastePrice::class)
-            ->ofMany(
-                ['effective_from' => 'max', 'id' => 'max'],
-                fn ($query) => $query->where('effective_from', '<=', now()->toDateString()),
-            );
+        return $this->hasMany(WasteItem::class);
     }
 
     public function scopeActive(Builder $query): Builder

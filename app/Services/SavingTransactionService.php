@@ -1,14 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Balance;
 use App\Models\BalanceHistory;
 use App\Models\PointHistory;
+use App\Models\PointRule;
 use App\Models\SavingTransaction;
 use App\Models\SavingTransactionItem;
 use App\Models\User;
-use App\Models\WasteCategory;
+use App\Models\WasteItem;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -16,7 +19,8 @@ use InvalidArgumentException;
  * Creates a saving transaction atomically.
  *
  * Snapshots each item's price so historical transactions stay intact even if
- * category prices change. Updates `saldo_tertahan` and awards points to members.
+ * item prices change. Stock flows into the `nabung` inventory pool (later sold
+ * to mitra). Points awarded using the active PointRule; rate is snapshot.
  */
 class SavingTransactionService
 {
@@ -25,7 +29,7 @@ class SavingTransactionService
     ) {}
 
     /**
-     * @param  array<int, array{waste_category_id: int, quantity: float|string}>  $items
+     * @param  array<int, array{waste_item_id: int, quantity: float|string}>  $items
      */
     public function create(
         User $nasabah,
@@ -47,12 +51,12 @@ class SavingTransactionService
             $totalValue = 0.0;
 
             foreach ($items as $item) {
-                $category = WasteCategory::with('currentPrice')->findOrFail($item['waste_category_id']);
-                $price = $category->currentPrice;
+                $wasteItem = WasteItem::with(['category', 'currentPrice'])->findOrFail($item['waste_item_id']);
+                $price = $wasteItem->currentPrice;
 
                 if (! $price) {
                     throw new InvalidArgumentException(
-                        "Kategori '{$category->name}' belum memiliki harga aktif."
+                        "Barang '{$wasteItem->name}' belum memiliki harga aktif."
                     );
                 }
 
@@ -65,10 +69,12 @@ class SavingTransactionService
                 $subtotal = round($quantity * (float) $price->price_per_unit, 2);
 
                 $preparedItems[] = [
-                    'waste_category_id' => $category->id,
+                    'waste_item' => $wasteItem,
                     'waste_price_id' => $price->id,
-                    'category_name_snapshot' => $category->name,
-                    'unit_snapshot' => $category->unit,
+                    'item_code_snapshot' => $wasteItem->code,
+                    'item_name_snapshot' => $wasteItem->name,
+                    'category_name_snapshot' => $wasteItem->category->name,
+                    'unit_snapshot' => $wasteItem->unit,
                     'price_per_unit_snapshot' => (float) $price->price_per_unit,
                     'quantity' => $quantity,
                     'subtotal' => $subtotal,
@@ -78,10 +84,14 @@ class SavingTransactionService
                 $totalValue += $subtotal;
             }
 
+            $rule = null;
+            $rate = 0.0;
             $points = 0;
 
             if ($nasabah->is_member) {
-                $points = (int) floor($totalValue * (float) config('banksampah.points_per_rupiah'));
+                $rule = PointRule::resolveActive();
+                $rate = (float) ($rule?->points_per_rupiah ?? 0);
+                $points = (int) floor($totalValue * $rate);
             }
 
             $transaction = SavingTransaction::create([
@@ -94,17 +104,26 @@ class SavingTransactionService
                 'transacted_at' => now(),
             ]);
 
-            foreach ($preparedItems as $itemIndex => $item) {
+            foreach ($preparedItems as $row) {
                 SavingTransactionItem::create([
                     'saving_transaction_id' => $transaction->id,
-                    ...$item,
+                    'waste_item_id' => $row['waste_item']->id,
+                    'waste_price_id' => $row['waste_price_id'],
+                    'item_code_snapshot' => $row['item_code_snapshot'],
+                    'item_name_snapshot' => $row['item_name_snapshot'],
+                    'category_name_snapshot' => $row['category_name_snapshot'],
+                    'unit_snapshot' => $row['unit_snapshot'],
+                    'price_per_unit_snapshot' => $row['price_per_unit_snapshot'],
+                    'quantity' => $row['quantity'],
+                    'subtotal' => $row['subtotal'],
                 ]);
 
                 $this->inventoryService->add(
-                    category: WasteCategory::find($item['waste_category_id']),
-                    quantity: (float) $item['quantity'],
+                    item: $row['waste_item'],
+                    source: InventoryService::SOURCE_NABUNG,
+                    quantity: $row['quantity'],
                     reason: 'nabung',
-                    source: $transaction,
+                    sourceRef: $transaction,
                     createdBy: $createdBy,
                 );
             }
@@ -129,9 +148,11 @@ class SavingTransactionService
             if ($points > 0) {
                 PointHistory::create([
                     'user_id' => $nasabah->id,
+                    'point_rule_id' => $rule?->id,
                     'type' => 'earn',
                     'points' => $points,
                     'balance_after' => $balance->points,
+                    'rate_snapshot' => $rate,
                     'source_type' => SavingTransaction::class,
                     'source_id' => $transaction->id,
                     'description' => 'Poin dari transaksi nabung #'.$transaction->id,
@@ -139,7 +160,7 @@ class SavingTransactionService
                 ]);
             }
 
-            return $transaction->load('items.category');
+            return $transaction->load('items.item.category');
         });
     }
 }
